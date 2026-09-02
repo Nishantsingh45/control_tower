@@ -309,6 +309,18 @@ def main() -> None:
     assert abs(naive_each - 85.59) < 0.05 and abs(naive_case - 85.88) < 0.05, \
         f"fill-rate check failed: {naive_each} / {naive_case}"
     print(f"  check: fill rate eaches {naive_each}% / cases {naive_case}% (matches FINDINGS F1)")
+    con.close()
+
+    # A rebuild wipes the DB, so re-materialise external tables from the local
+    # caches if the V2 ETLs have run (no network involved).
+    from etl.fetch_freight import load as load_freight
+    n = load_freight()
+    if n:
+        print(f"  fct_freight      {n:>9,} rows (from cache)")
+    from etl.scrape_bazaarpulse import load as load_prices
+    n = load_prices()
+    if n:
+        print(f"  price tables     {n:>9,} observations (from cache)")
     print(f"Done -> {ANALYTICS_DB}")
 
 
