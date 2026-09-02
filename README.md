@@ -5,7 +5,7 @@ price position, worst performers first, with an ask-anything box that answers
 plain-English questions **and shows the SQL and rows behind every answer**.
 
 Built for the FDE take-home. Read [`DECISIONS.md`](DECISIONS.md) first, then
-[`FINDINGS.md`](FINDINGS.md) — the 16 verified data findings the design rests on.
+[`FINDINGS.md`](FINDINGS.md) — the 17 verified data findings the design rests on.
 
 ## Cold start
 
@@ -30,9 +30,10 @@ That is the whole V1. Two optional externals feed the remaining tiles:
 python etl/fetch_freight.py       # walks the partner API once (~3 min), caches,
                                   # loads fct_freight. Starts the mock server
                                   # itself if nothing answers on :8088.
-python etl/scrape_bazaarpulse.py  # scrapes the bundled competitor site
-                                  # (~6 min: robots.txt crawl-delay 1s is
-                                  # honoured), caches, loads price tables.
+python etl/scrape_bazaarpulse.py  # scrapes the bundled competitor site.
+                                  # ~20 min first run: robots.txt asks for a
+                                  # 1s crawl-delay and we honour it across
+                                  # ~1,200 pages. Cached + resumable after.
                                   # Serves the site itself if :8080 is quiet.
 ```
 
@@ -62,7 +63,7 @@ python smoke_test.py  # answers the brief's eight illustrative questions in the 
 | `app.py` | Streamlit dashboard: headline KPIs, worst performers, region filter, tabs |
 | `chat.py` | NL → SQL over the semantic layer; SELECT-only, read-only connection, SQL always shown |
 | `etl/fetch_freight.py` | Partner API walk: 429/503 retries, cursor checkpointing, paise→INR |
-| `etl/scrape_bazaarpulse.py` | Robots-respecting scraper for both markup/pagination dialects + SKU matcher |
+| `etl/scrape_bazaarpulse.py` | Robots-respecting scraper: four per-city price markups, two pagination schemes, SKU matcher |
 | `smoke_test.py` | The brief's 8 questions, answered from the CLI |
 | `config.py` | All paths and every analytical threshold, in one reviewable place |
 
