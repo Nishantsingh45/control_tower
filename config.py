@@ -38,4 +38,4 @@ ON_TIME_GRACE_MIN = 30
 FY_START_MONTH = 4
 
 # Ask-anything model (needs ANTHROPIC_API_KEY; the app degrades gracefully without it).
-CHAT_MODEL = os.environ.get("KESTREL_CHAT_MODEL", "claude-sonnet-5")
+CHAT_MODEL = os.environ.get("KESTREL_CHAT_MODEL", "claude-opus-5")

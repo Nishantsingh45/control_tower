@@ -54,7 +54,7 @@ def _filters(quarter=None, region_id=None, alias="") -> tuple[str, list]:
 
 def quarters(con) -> list[str]:
     return [r[0] for r in con.execute(
-        "select distinct fy_quarter from fct_order order by min(order_date)")]
+        "select fy_quarter from fct_order group by fy_quarter order by min(order_date)")]
 
 
 def regions(con) -> pd.DataFrame:
