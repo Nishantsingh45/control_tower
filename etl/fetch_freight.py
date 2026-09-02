@@ -36,6 +36,8 @@ from build import fy_parts                                          # noqa: E402
 from config import (ANALYTICS_DB, CACHE_DIR, PARTNER_API_KEY,       # noqa: E402
                     PARTNER_API_SCRIPT, PARTNER_API_URL)
 
+SESSION = requests.Session()          # keep-alive: one TCP connection for the walk
+
 RAW = CACHE_DIR / "freight_invoices.jsonl"
 STATE = CACHE_DIR / "freight_cursor.json"
 SURCHARGE = CACHE_DIR / "fuel_surcharge.json"
@@ -45,7 +47,7 @@ MAX_TRIES = 10
 
 def api_up() -> bool:
     try:
-        return requests.get(f"{PARTNER_API_URL}/v1/health", timeout=3).status_code == 200
+        return SESSION.get(f"{PARTNER_API_URL}/v1/health", timeout=3).status_code == 200
     except requests.RequestException:
         return False
 
@@ -74,7 +76,7 @@ def get_with_retries(url: str, params: dict | None = None) -> dict:
     network faults. Gives up only after MAX_TRIES."""
     for attempt in range(MAX_TRIES):
         try:
-            r = requests.get(url, params=params, headers=HEADERS, timeout=20)
+            r = SESSION.get(url, params=params, headers=HEADERS, timeout=20)
         except requests.RequestException:
             time.sleep(min(0.5 * 2 ** attempt, 8) + random.uniform(0, 0.3))
             continue

@@ -173,8 +173,13 @@ with tabs[3]:
                                 values="avg_gap_vs_mrp_pct")
         st.dataframe(pivot.style.format("{:+.1f}%").background_gradient(
             cmap="RdYlGn_r", vmin=-30, vmax=30), width="stretch")
-        st.caption("Negative = competitors sell below our MRP. "
-                   "Observed prices scraped from BazaarPulse (weekly refresh dates on site).")
+        unmatched = M.df(con, """select count(*) as n from price_listing
+                                 where product_id is null""").iloc[0, 0]
+        matched = M.df(con, "select count(*) as n from price_listing "
+                            "where product_id is not null").iloc[0, 0]
+        st.caption(f"Negative = competitors sell below our MRP. Prices scraped from "
+                   f"BazaarPulse; {matched} listings matched to SKUs, {unmatched} "
+                   "unmatched (listed under Data health - never silently dropped).")
         city = st.selectbox("City for SKU-level view",
                             sorted(gap.city.unique().tolist()))
         st.markdown(f"#### Top 20 SKUs by sales value: our MRP vs lowest observed price in {city}")
@@ -197,6 +202,12 @@ with tabs[5]:
         select exclude_reason, count(*) as outlets from dim_outlet
         where exclude_reason is not null group by 1 order by 2 desc"""),
         hide_index=True)
+    if M.has_table(con, "price_listing"):
+        st.markdown("#### Competitor listings we could NOT match to a SKU")
+        st.dataframe(M.df(con, """
+            select listing_id, city, retailer, listing_title, pack, category_site,
+                   price_inr from price_listing where product_id is null
+            order by city, listing_title"""), hide_index=True, width="stretch")
     st.markdown("#### Build metadata")
     st.dataframe(M.df(con, "select * from meta_build"), hide_index=True)
     st.markdown("---")

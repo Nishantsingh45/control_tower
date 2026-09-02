@@ -51,7 +51,8 @@ failures from heat waves; per-user views and saved questions.
 **What breaks first in production.** The full rebuild — O(all history) in
 in-process SQLite — is fine at 820K rows and wrong at 100×; it needs
 incremental loads keyed on order/delivery IDs and a real warehouse. Second:
-the title-based SKU matcher (79% match rate here) degrades as competitors
-reword listings; it needs a curated mapping table with confidence decay.
+the title-based SKU matcher (95% match rate here, 53 listings honestly
+unmatched) degrades as competitors reword listings; it needs a curated mapping
+table with confidence decay.
 Third: the chat depends on an external LLM API — it degrades to pre-wired
 questions, but a production version needs caching, evals and a query allowlist.
