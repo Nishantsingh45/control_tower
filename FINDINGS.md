@@ -128,6 +128,16 @@ populated: confirmed (0 of 14,000). The build trusts only what was verified.
 
 > **Evidence:** gross-vs-lines exceptions: 0; approval_date populated: 0/14,000
 
+## F15. Credit notes are dated past the stated period end
+
+393 credit notes carry return dates in July 2026, after the pack's stated
+30 June 2026 cut-off - returns lag the orders they credit. A calendar that stops at period end
+silently drops them (it did, in an early build). The analytics calendar runs to 2026-07-29 and
+June-quarter returns metrics note that late credits may still be arriving ('the quarter is not
+closed for returns').
+
+> **Evidence:** returns dated after 2026-06-30: 393; latest return_date: 2026-07-29
+
 ## F14. What is clean (and is relied on)
 
 Order numbers unique (0 dupes), no orphan lines (0), deliveries map

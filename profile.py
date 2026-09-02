@@ -205,6 +205,17 @@ is 'populated where short' - trivially, because every line is short (F3). `appro
 populated: confirmed ({appr} of 14,000). The build trusts only what was verified.""",
         f"gross-vs-lines exceptions: 0; approval_date populated: {appr}/14,000")
 
+    # F15 -- returns arrive after the period end ---------------------------
+    late, mx_d = one("""select sum(return_date > '2026-06-30'), max(return_date)
+                        from returns_credit_notes""")
+    add("F15. Credit notes are dated past the stated period end",
+        f"""{late} credit notes carry return dates in July 2026, after the pack's stated
+30 June 2026 cut-off - returns lag the orders they credit. A calendar that stops at period end
+silently drops them (it did, in an early build). The analytics calendar runs to {mx_d} and
+June-quarter returns metrics note that late credits may still be arriving ('the quarter is not
+closed for returns').""",
+        f"returns dated after 2026-06-30: {late}; latest return_date: {mx_d}")
+
     # F14 -- what is actually clean ----------------------------------------
     dupes, orphans, multi = one("""select
         (select count(*) from (select order_number from orders group by 1 having count(*)>1)),
