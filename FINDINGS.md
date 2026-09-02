@@ -31,8 +31,10 @@ components and keeps the feed's value alongside as `net_as_reported`.
 
 Across all 511,516 lines the maximum line fill is 99.86%. Even orders with
 status DELIVERED are only ~88% filled. Any strict in-full definition yields OTIF = 0 for the
-entire 18 months, so the metric would carry no signal. We define in-full as order fill (eaches)
->= 98%, exposed as a single constant (IN_FULL_THRESHOLD in config.py) and flagged on screen.
+entire 18 months, so the metric would carry no signal - as would 98% or even 95%: order-level
+fill tops out at 99.4% with p99 = 94.8%. In-full is defined as order fill (eaches) >= 90%, the
+highest round threshold that discriminates (18% of orders pass), exposed as a single constant
+(IN_FULL_THRESHOLD in config.py) and stated on screen.
 
 > **Evidence:** max(delivered_qty/ordered_qty) on non-cancelled lines = 0.9986
 
@@ -127,6 +129,17 @@ is 'populated where short' - trivially, because every line is short (F3). `appro
 populated: confirmed (0 of 14,000). The build trusts only what was verified.
 
 > **Evidence:** gross-vs-lines exceptions: 0; approval_date populated: 0/14,000
+
+## F16. Chilled product routinely ships on non-reefer vehicles; some excursion flags are noise
+
+46,699 deliveries (61%) carry at least one chilled SKU on a NON-reefer
+vehicle, logging 1,443 temperature excursions - triple the reefer fleet's count.
+Meanwhile 3,752 reefer trips carry no chilled product at all, and 391
+excursion flags sit on fully-ambient loads (physically meaningless; excluded from the metric).
+'Chilled delivery' in every metric therefore means carries >=1 chilled SKU, not runs on a
+reefer route. The routing itself is arguably the biggest cold-chain finding in the data.
+
+> **Evidence:** reefer=0 chilled_cargo=0: 391 excursions / 13,189 deliveries; reefer=0 chilled_cargo=1: 1,443 excursions / 46,699 deliveries; reefer=1 chilled_cargo=0: 104 excursions / 3,752 deliveries; reefer=1 chilled_cargo=1: 433 excursions / 13,249 deliveries
 
 ## F15. Credit notes are dated past the stated period end
 

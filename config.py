@@ -26,10 +26,11 @@ PARTNER_API_SCRIPT = Path(os.environ.get("PARTNER_API_SCRIPT", REPO_ROOT.parent 
 IST = timezone(timedelta(hours=5, minutes=30), name="IST")
 
 # --- Judgement calls (defended in DECISIONS.md) ---------------------------
-# No order line in the data is ever 100% delivered (max observed 99.86%),
-# so a literal "in full" makes OTIF identically zero. We treat an order as
-# in-full at >= 98% of ordered eaches, and expose the threshold here.
-IN_FULL_THRESHOLD = 0.98
+# No order line in the data is ever 100% delivered (max observed 99.86%) and
+# order-level fill tops out at 99.4% (p99 = 94.8%), so a literal - or even 98% -
+# "in full" makes OTIF identically zero and carries no signal. 90% is the highest
+# round threshold with discriminating power (18% of orders pass). See FINDINGS F3.
+IN_FULL_THRESHOLD = 0.90
 # On-time = actual arrival within this many minutes of plan.
 ON_TIME_GRACE_MIN = 30
 

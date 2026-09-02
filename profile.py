@@ -78,8 +78,10 @@ components and keeps the feed's value alongside as `net_as_reported`.""",
     add("F3. No order line is ever delivered in full - a literal OTIF is identically zero",
         f"""Across all 511,516 lines the maximum line fill is {mx*100:.2f}%. Even orders with
 status DELIVERED are only ~88% filled. Any strict in-full definition yields OTIF = 0 for the
-entire 18 months, so the metric would carry no signal. We define in-full as order fill (eaches)
->= 98%, exposed as a single constant (IN_FULL_THRESHOLD in config.py) and flagged on screen.""",
+entire 18 months, so the metric would carry no signal - as would 98% or even 95%: order-level
+fill tops out at 99.4% with p99 = 94.8%. In-full is defined as order fill (eaches) >= 90%, the
+highest round threshold that discriminates (18% of orders pass), exposed as a single constant
+(IN_FULL_THRESHOLD in config.py) and stated on screen.""",
         f"max(delivered_qty/ordered_qty) on non-cancelled lines = {mx}")
 
     # F4 -- delay_minutes vs timestamps ------------------------------------
@@ -204,6 +206,25 @@ orders, all three systems) - the real KP-2301 defect is in net value (F2). `shor
 is 'populated where short' - trivially, because every line is short (F3). `approval_date` never
 populated: confirmed ({appr} of 14,000). The build trusts only what was verified.""",
         f"gross-vs-lines exceptions: 0; approval_date populated: {appr}/14,000")
+
+    # F16 -- chilled product moves on ambient vehicles ---------------------
+    xr = q("""
+        with chill as (select distinct l.order_id from order_lines l
+                       join products p using(product_id) where p.is_chilled=1)
+        select r.is_reefer, o.order_id in (select order_id from chill),
+               sum(d.temperature_excursion_flag), count(*)
+        from deliveries d join orders o using(order_id) join routes r on r.route_id=d.route_id
+        group by 1,2""")
+    m = {(a, b): (e, n) for a, b, e, n in xr}
+    add("F16. Chilled product routinely ships on non-reefer vehicles; some excursion flags are noise",
+        f"""{m[(0,1)][1]:,} deliveries (61%) carry at least one chilled SKU on a NON-reefer
+vehicle, logging {m[(0,1)][0]:,} temperature excursions - triple the reefer fleet's count.
+Meanwhile {m[(1,0)][1]:,} reefer trips carry no chilled product at all, and {m[(0,0)][0]}
+excursion flags sit on fully-ambient loads (physically meaningless; excluded from the metric).
+'Chilled delivery' in every metric therefore means carries >=1 chilled SKU, not runs on a
+reefer route. The routing itself is arguably the biggest cold-chain finding in the data.""",
+        "; ".join(f"reefer={a} chilled_cargo={b}: {e:,} excursions / {n:,} deliveries"
+                  for (a, b), (e, n) in sorted(m.items())))
 
     # F15 -- returns arrive after the period end ---------------------------
     late, mx_d = one("""select sum(return_date > '2026-06-30'), max(return_date)

@@ -227,6 +227,13 @@ def main() -> None:
            (select fill from order_fill f where f.order_id = fct_delivery.order_id)""")
     x(f"update fct_delivery set in_full = order_fill_each >= {IN_FULL_THRESHOLD}")
     x("update fct_delivery set otif = on_time and in_full")
+    # F16: 61% of deliveries carry chilled SKUs on NON-reefer vehicles, and 391
+    # excursion flags sit on fully-ambient loads. "Chilled delivery" therefore
+    # means carries >=1 chilled SKU - not runs on a reefer route.
+    x("alter table fct_delivery add column carries_chilled int")
+    x("""update fct_delivery set carries_chilled = order_id in
+           (select distinct l.order_id from fct_order_line l
+            join dim_product p using(product_id) where p.is_chilled=1)""")
 
     # -- fct_return (F10) --------------------------------------------------
     x("""create table fct_return as
@@ -234,7 +241,14 @@ def main() -> None:
                 dd.month_label, dd.fy_quarter,
                 r.order_id, r.outlet_id, o.region_id, o.channel, r.product_id,
                 r.return_reason_code,
-                coalesce(rr.label, r.return_reason_code) as return_reason,
+                case r.return_reason_code
+                    when 'RT01_NEAR_EXPIRY'      then 'Near expiry'
+                    when 'RT02_DAMAGE_TRANSIT'   then 'Transit damage'
+                    when 'RT03_WRONG_SKU'        then 'Wrong SKU'
+                    when 'RT04_QUALITY'          then 'Quality'
+                    when 'RT05_OVERSUPPLY'       then 'Oversupply'
+                    when 'RT06_COLD_CHAIN_BREACH' then 'Cold chain breach'
+                    else r.return_reason_code end as return_reason,
                 r.disposition, r.status,
                 case when r.return_qty < 0 then -1 else 1 end as qty_sign_as_reported,
                 case when r.qty_uom='CASE' then abs(r.return_qty)*p.case_pack
@@ -245,14 +259,7 @@ def main() -> None:
          from src.returns_credit_notes r
          join dim_date dd on dd.date = r.return_date
          left join fct_order o using(order_id)
-         left join dim_product p using(product_id)
-         left join (select 'RT01' code,'Near expiry' label union all
-                    select 'RT02','Transit damage' union all
-                    select 'RT03','Wrong SKU' union all
-                    select 'RT04','Quality' union all
-                    select 'RT05','Oversupply' union all
-                    select 'RT06','Cold chain breach') rr
-                on rr.code = r.return_reason_code""")
+         left join dim_product p using(product_id)""")
 
     # -- fct_inventory ------------------------------------------------------
     x("""create table fct_inventory as
