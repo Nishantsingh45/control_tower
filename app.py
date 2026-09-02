@@ -171,8 +171,18 @@ with tabs[3]:
         gap = M.price_position_by_city_category(con)
         pivot = gap.pivot_table(index="category", columns="city",
                                 values="avg_gap_vs_mrp_pct")
-        st.dataframe(pivot.style.format("{:+.1f}%").background_gradient(
-            cmap="RdYlGn_r", vmin=-30, vmax=30), width="stretch")
+
+        def diverging_tint(v):
+            """Two-hue diverging fill, neutral at zero (no matplotlib needed).
+            Orange = competitors undercut our MRP; blue = they price above it."""
+            if pd.isna(v):
+                return ""
+            a = min(abs(v) / 30, 1) * 0.55
+            r, g, b = (235, 104, 52) if v < 0 else (42, 120, 214)
+            return f"background-color: rgba({r},{g},{b},{a:.2f})"
+
+        st.dataframe(pivot.style.format("{:+.1f}%").map(diverging_tint),
+                     width="stretch")
         unmatched = M.df(con, """select count(*) as n from price_listing
                                  where product_id is null""").iloc[0, 0]
         matched = M.df(con, "select count(*) as n from price_listing "

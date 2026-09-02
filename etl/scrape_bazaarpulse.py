@@ -281,6 +281,8 @@ def fetch() -> None:
         print(f"Fetching {len(todo)} detail pages (of {len(matched)} matched; "
               f"{len(have)} already cached) ...")
         missing, added = 0, 0
+        if HISTORY.exists() and not HISTORY.read_text(encoding="utf-8").endswith("\n"):
+            HISTORY.write_text(HISTORY.read_text(encoding="utf-8") + "\n", encoding="utf-8")
         with HISTORY.open("a", encoding="utf-8") as out:
             for i, r in enumerate(todo):
                 page = ps.get(f"/product/{r['listing_id']}.html")
