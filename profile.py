@@ -237,6 +237,19 @@ June-quarter returns metrics note that late credits may still be arriving ('the 
 closed for returns').""",
         f"returns dated after 2026-06-30: {late}; latest return_date: {mx_d}")
 
+    # F17 -- duplicate product names in the master -------------------------
+    dupn = q("""select product_name, count(*), group_concat(sku_code),
+                       group_concat(mrp_inr)
+                from products group by lower(product_name) having count(*) > 1""")
+    add("F17. Nine product names exist twice in the master under different SKUs and MRPs",
+        f"""{len(dupn)} product names appear twice with different SKU codes, different MRPs,
+and (mostly) both ACTIVE and transacting - e.g. 'Hillfare Mayonnaise 750ml' at Rs 452
+(SKU00283) and Rs 32 (SKU00284), both with ~1,500 order lines. Any name-keyed join (including
+competitor price matching) silently picks one at random; the price matcher disambiguates
+name collisions using the MRP displayed on the retailer listing. Which SKU is 'right' needs a
+client answer - flagged, not guessed.""",
+        "; ".join(f"'{n}' x{c}: {s} (MRP {m})" for n, c, s, m in dupn[:4]) + " ...")
+
     # F14 -- what is actually clean ----------------------------------------
     dupes, orphans, multi = one("""select
         (select count(*) from (select order_number from orders group by 1 having count(*)>1)),

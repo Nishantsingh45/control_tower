@@ -151,6 +151,17 @@ closed for returns').
 
 > **Evidence:** returns dated after 2026-06-30: 393; latest return_date: 2026-07-29
 
+## F17. Nine product names exist twice in the master under different SKUs and MRPs
+
+9 product names appear twice with different SKU codes, different MRPs,
+and (mostly) both ACTIVE and transacting - e.g. 'Hillfare Mayonnaise 750ml' at Rs 452
+(SKU00283) and Rs 32 (SKU00284), both with ~1,500 order lines. Any name-keyed join (including
+competitor price matching) silently picks one at random; the price matcher disambiguates
+name collisions using the MRP displayed on the retailer listing. Which SKU is 'right' needs a
+client answer - flagged, not guessed.
+
+> **Evidence:** 'Amrit Valley Paneer 200g' x2: SKU00019,SKU00023 (MRP 139.0,100.0); 'Amrit Valley Rusk 150g' x2: SKU00078,SKU00081 (MRP 423.0,408.0); 'Bluepeak Biscuits 200g' x2: SKU00168,SKU00174 (MRP 477.0,468.0); 'Bluepeak Frozen Peas 100g' x2: SKU00187,SKU00190 (MRP 435.0,356.0) ...
+
 ## F14. What is clean (and is relied on)
 
 Order numbers unique (0 dupes), no orphan lines (0), deliveries map

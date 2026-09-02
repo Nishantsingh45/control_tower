@@ -192,22 +192,33 @@ def build_matcher(con):
     """Three indexes over the product master, tried in confidence order:
     exact normalised name (1.0); g/kg-folded (0.8) - both sides of this data
     confuse those units; unit-agnostic (0.6) - same brand+noun+pack number,
-    different unit letter (e.g. listing '1000ml' noodles vs master '1000g')."""
-    exact, folded, agnostic = {}, {}, {}
-    for pid, name in con.execute("select product_id, product_name from dim_product"):
-        key = re.sub(r"\s+", " ", name.strip().lower())
-        exact[key] = pid
-        folded.setdefault(_fold_kg(key), pid)
-        agnostic.setdefault(_strip_uom(key), pid)
+    different unit letter (e.g. listing '1000ml' noodles vs master '1000g').
 
-    def match(title: str) -> tuple[int | None, float, str]:
+    Nine product names appear TWICE in the master under different SKU codes
+    with different MRPs (e.g. 'Hillfare Mayonnaise 750ml' at Rs 452 and Rs 32 -
+    FINDINGS F17). Name collisions are therefore disambiguated by the MRP the
+    retailer displays on the listing: closest master MRP wins."""
+    exact, folded, agnostic = {}, {}, {}
+    for pid, name, mrp in con.execute(
+            "select product_id, product_name, mrp_current_inr from dim_product"):
+        key = re.sub(r"\s+", " ", name.strip().lower())
+        for index, k in ((exact, key), (folded, _fold_kg(key)),
+                         (agnostic, _strip_uom(key))):
+            index.setdefault(k, []).append((pid, mrp))
+
+    def pick(cands: list, site_mrp: float | None) -> int:
+        if len(cands) == 1 or site_mrp is None:
+            return cands[0][0]
+        return min(cands, key=lambda c: abs((c[1] or 0) - site_mrp))[0]
+
+    def match(title: str, site_mrp: float | None = None) -> tuple[int | None, float, str]:
         t = normalise(title)
         if t in exact:
-            return exact[t], 1.0, "exact"
+            return pick(exact[t], site_mrp), 1.0, "exact"
         if _fold_kg(t) in folded:
-            return folded[_fold_kg(t)], 0.8, "g_kg_folded"
+            return pick(folded[_fold_kg(t)], site_mrp), 0.8, "g_kg_folded"
         if _strip_uom(t) in agnostic:
-            return agnostic[_strip_uom(t)], 0.6, "uom_mismatch"
+            return pick(agnostic[_strip_uom(t)], site_mrp), 0.6, "uom_mismatch"
         return None, 0.0, "unmatched"
     return match
 
@@ -219,7 +230,8 @@ def match_all(listings: list[dict]) -> list[dict]:
     match = build_matcher(con)
     con.close()
     for r in listings:
-        r["product_id"], r["match_confidence"], r["match_method"] = match(r["title"])
+        r["product_id"], r["match_confidence"], r["match_method"] = \
+            match(r["title"], r.get("site_mrp_inr"))
     return listings
 
 
