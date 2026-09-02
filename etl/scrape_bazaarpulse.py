@@ -162,7 +162,10 @@ def parse_cards(html: str, city: str) -> list[dict]:
 
 # ---------------------------------------------------------------- matching --
 
-BRAND_FIXES = [("kestrel sel.", "kestrel select"), ("amritvalley", "amrit valley")]
+# Retailer-side abbreviations and brand spellings, mapped to the product
+# master's vocabulary (each earned its place by appearing in real listings).
+REWRITES = [("kestrel sel.", "kestrel select"), ("amritvalley", "amrit valley"),
+            ("inst. noodles", "instant noodles"), ("frzn ", "frozen ")]
 NOISE_PRE = re.compile(r"^(?:combo|pack of \d+)\s+", re.I)
 NOISE_POST = re.compile(r"\s*(?:\(new\)|\|\s*best before[^|]*|-\s*family pack)\s*$", re.I)
 
@@ -172,75 +175,116 @@ def normalise(title: str) -> str:
     for _ in range(2):                       # noise can stack: "Combo X (New)"
         t = NOISE_PRE.sub("", t)
         t = NOISE_POST.sub("", t)
-    for a, b in BRAND_FIXES:
+    for a, b in REWRITES:
         t = t.replace(a, b)
     return re.sub(r"\s+", " ", t)
 
 
+def _fold_kg(s: str) -> str:
+    return re.sub(r"(\d)\s*kg\b", r"\1g", s)
+
+
+def _strip_uom(s: str) -> str:
+    return re.sub(r"(\d)\s*(?:ml|kg|g)\b", r"\1", s)
+
+
 def build_matcher(con):
-    """Two indexes over the product master: exact normalised name, and a
-    g/kg-folded variant (both sides of the data confuse the two units)."""
-    exact, folded = {}, {}
+    """Three indexes over the product master, tried in confidence order:
+    exact normalised name (1.0); g/kg-folded (0.8) - both sides of this data
+    confuse those units; unit-agnostic (0.6) - same brand+noun+pack number,
+    different unit letter (e.g. listing '1000ml' noodles vs master '1000g')."""
+    exact, folded, agnostic = {}, {}, {}
     for pid, name in con.execute("select product_id, product_name from dim_product"):
         key = re.sub(r"\s+", " ", name.strip().lower())
         exact[key] = pid
-        folded.setdefault(re.sub(r"(\d)\s*kg\b", r"\1g", key), pid)
+        folded.setdefault(_fold_kg(key), pid)
+        agnostic.setdefault(_strip_uom(key), pid)
 
     def match(title: str) -> tuple[int | None, float, str]:
         t = normalise(title)
         if t in exact:
             return exact[t], 1.0, "exact"
-        tf = re.sub(r"(\d)\s*kg\b", r"\1g", t)
-        if tf in folded:
-            return folded[tf], 0.8, "g_kg_folded"
+        if _fold_kg(t) in folded:
+            return folded[_fold_kg(t)], 0.8, "g_kg_folded"
+        if _strip_uom(t) in agnostic:
+            return agnostic[_strip_uom(t)], 0.6, "uom_mismatch"
         return None, 0.0, "unmatched"
     return match
+
+
+def match_all(listings: list[dict]) -> list[dict]:
+    """(Re)compute SKU matches for cached listings. Runs at load time so a
+    matcher improvement applies without re-crawling the site."""
+    con = sqlite3.connect(f"file:{ANALYTICS_DB.as_posix()}?mode=ro", uri=True)
+    match = build_matcher(con)
+    con.close()
+    for r in listings:
+        r["product_id"], r["match_confidence"], r["match_method"] = match(r["title"])
+    return listings
 
 
 # ------------------------------------------------------------------- fetch --
 
 def fetch() -> None:
+    """Crawl listing pages (once), then detail pages for matched listings.
+    Incremental: a matcher improvement or interrupted run only tops up the
+    detail pages that are missing from the history cache."""
     CACHE_DIR.mkdir(exist_ok=True)
-    if LISTINGS.exists() and HISTORY.exists():
-        print(f"Cache present ({LISTINGS}), skipping crawl. Delete it to re-scrape.")
-        return
-    proc = ensure_site()
+    proc, ps = None, None
     try:
-        ps = PoliteSession(BAZAARPULSE_URL)
-        print(f"robots.txt: crawl-delay {ps.delay}s, /internal/ disallowed -> honoured")
-        rows = []
-        for slug, city in CITIES.items():
-            n0 = len(rows)
-            for html in listing_pages(ps, slug):
-                rows.extend(parse_cards(html, city))
-            print(f"  [{slug}] {len(rows)-n0} listings")
-        con = sqlite3.connect(f"file:{ANALYTICS_DB.as_posix()}?mode=ro", uri=True)
-        match = build_matcher(con)
-        con.close()
-        for r in rows:
-            r["product_id"], r["match_confidence"], r["match_method"] = match(r["title"])
-        matched = [r for r in rows if r["product_id"]]
-        print(f"Matched {len(matched)}/{len(rows)} listings to SKUs "
-              f"({sum(r['match_method'] == 'exact' for r in rows)} exact, "
-              f"{sum(r['match_method'] == 'g_kg_folded' for r in rows)} g/kg-folded); "
-              f"{len(rows)-len(matched)} left unmatched (kept, reported).")
-        LISTINGS.write_text("\n".join(json.dumps(r) for r in rows), encoding="utf-8")
+        if LISTINGS.exists():
+            rows = [json.loads(l) for l in
+                    LISTINGS.read_text(encoding="utf-8").splitlines() if l]
+            print(f"Listings cache present ({len(rows)} rows) - skipping listing crawl.")
+        else:
+            proc = ensure_site()
+            ps = PoliteSession(BAZAARPULSE_URL)
+            print(f"robots.txt: crawl-delay {ps.delay}s, /internal/ disallowed -> honoured")
+            rows = []
+            for slug, city in CITIES.items():
+                n0 = len(rows)
+                for html in listing_pages(ps, slug):
+                    rows.extend(parse_cards(html, city))
+                print(f"  [{slug}] {len(rows)-n0} listings")
+            LISTINGS.write_text("\n".join(json.dumps(r) for r in rows), encoding="utf-8")
 
-        # price history detail pages - matched listings only
-        hist, missing = [], 0
-        for i, r in enumerate(matched):
-            page = ps.get(f"/product/{r['listing_id']}.html")
-            if page is None:
-                missing += 1
-                continue
-            for d, p in HIST_ROW.findall(page):
-                hist.append({"listing_id": r["listing_id"], "observed_on": d,
-                             "price_inr": float(p)})
-            if (i + 1) % 100 == 0:
-                print(f"  detail pages: {i+1}/{len(matched)}")
-        HISTORY.write_text("\n".join(json.dumps(h) for h in hist), encoding="utf-8")
-        print(f"History: {len(hist)} observations from {len(matched)-missing} pages "
-              f"({missing} detail pages 404 - skipped). {ps.fetched} requests total.")
+        rows = match_all(rows)
+        matched = [r for r in rows if r["product_id"]]
+        print(f"Matched {len(matched)}/{len(rows)} listings "
+              f"({sum(r['match_method'] == 'exact' for r in rows)} exact, "
+              f"{sum(r['match_method'] == 'g_kg_folded' for r in rows)} g/kg-folded, "
+              f"{sum(r['match_method'] == 'uom_mismatch' for r in rows)} unit-agnostic); "
+              f"{len(rows)-len(matched)} unmatched (kept, reported).")
+
+        have = ({json.loads(l)["listing_id"]
+                 for l in HISTORY.read_text(encoding="utf-8").splitlines() if l}
+                if HISTORY.exists() else set())
+        todo = [r for r in matched if r["listing_id"] not in have]
+        if not todo:
+            print("Price-history cache is complete - no detail pages to fetch.")
+            return
+        if ps is None:
+            proc = proc or ensure_site()
+            ps = PoliteSession(BAZAARPULSE_URL)
+        print(f"Fetching {len(todo)} detail pages (of {len(matched)} matched; "
+              f"{len(have)} already cached) ...")
+        missing, added = 0, 0
+        with HISTORY.open("a", encoding="utf-8") as out:
+            for i, r in enumerate(todo):
+                page = ps.get(f"/product/{r['listing_id']}.html")
+                if page is None:
+                    missing += 1
+                    continue
+                for d, p in HIST_ROW.findall(page):
+                    out.write(json.dumps({"listing_id": r["listing_id"],
+                                          "observed_on": d,
+                                          "price_inr": float(p)}) + "\n")
+                    added += 1
+                if (i + 1) % 100 == 0:
+                    out.flush()
+                    print(f"  detail pages: {i+1}/{len(todo)}")
+        print(f"History: +{added} observations ({missing} detail pages 404 - skipped). "
+              f"{ps.fetched} requests this run.")
     finally:
         if proc:
             proc.terminate()
@@ -253,9 +297,11 @@ def load(db_path: Path = ANALYTICS_DB) -> int:
     price_observation (matched listings x observation dates). No network."""
     if not LISTINGS.exists():
         return 0
-    listings = [json.loads(l) for l in LISTINGS.read_text(encoding="utf-8").splitlines() if l]
+    listings = match_all(  # matches recomputed at load time (see match_all)
+        [json.loads(l) for l in LISTINGS.read_text(encoding="utf-8").splitlines() if l])
     history = ([json.loads(l) for l in HISTORY.read_text(encoding="utf-8").splitlines() if l]
                if HISTORY.exists() else [])
+    history = list({(h["listing_id"], h["observed_on"]): h for h in history}.values())
     con = sqlite3.connect(db_path)
     con.execute("drop table if exists price_listing")
     con.execute("""create table price_listing (

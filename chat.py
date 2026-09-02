@@ -104,7 +104,7 @@ OUTPUT FORMAT
 CANNED = {
     "Five worst outlets by fill rate, last month":
         lambda con: M.worst_outlets(con, quarter="FY27 Q1"),
-    "OTIF by region, last complete quarter":
+    "Fill rate & OTIF by region, last complete quarter":
         lambda con: M.fill_by_region(con, quarter="FY27 Q1"),
     "Returns by category with top reason":
         lambda con: M.returns_by_category(con),
