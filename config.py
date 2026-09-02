@@ -1,0 +1,40 @@
+"""Central configuration. Every path and every analytical threshold lives here,
+so a reviewer can see (and change) each judgement call in one place."""
+import os
+from datetime import timedelta, timezone
+from pathlib import Path
+
+REPO_ROOT = Path(__file__).resolve().parent
+
+# The assignment pack ships the SQLite DB one level up from this repo.
+# Override with KESTREL_DB when the reviewer supplies their own copy.
+KESTREL_DB = Path(os.environ.get("KESTREL_DB", REPO_ROOT.parent / "data" / "kestrel_ops.db"))
+
+# Derived analytics store (rebuilt from scratch by build.py; never committed).
+ANALYTICS_DB = Path(os.environ.get("ANALYTICS_DB", REPO_ROOT / "analytics.sqlite"))
+
+CACHE_DIR = REPO_ROOT / "cache"
+
+# External surfaces (both ship with the pack and run on localhost).
+BAZAARPULSE_URL = os.environ.get("BAZAARPULSE_URL", "http://localhost:8080")
+BAZAARPULSE_SITE_DIR = Path(os.environ.get("BAZAARPULSE_SITE_DIR", REPO_ROOT.parent / "bazaarpulse_site"))
+PARTNER_API_URL = os.environ.get("PARTNER_API_URL", "http://localhost:8088")
+PARTNER_API_KEY = os.environ.get("PARTNER_API_KEY", "kp_live_7f3a9c21")
+PARTNER_API_SCRIPT = Path(os.environ.get("PARTNER_API_SCRIPT", REPO_ROOT.parent / "partner_api" / "server.py"))
+
+# IST is a fixed offset (no DST) -- a constant is safer than a tz database lookup.
+IST = timezone(timedelta(hours=5, minutes=30), name="IST")
+
+# --- Judgement calls (defended in DECISIONS.md) ---------------------------
+# No order line in the data is ever 100% delivered (max observed 99.86%),
+# so a literal "in full" makes OTIF identically zero. We treat an order as
+# in-full at >= 98% of ordered eaches, and expose the threshold here.
+IN_FULL_THRESHOLD = 0.98
+# On-time = actual arrival within this many minutes of plan.
+ON_TIME_GRACE_MIN = 30
+
+# Fiscal year runs April..March. FY label is the *ending* year: Apr 2026 -> FY27.
+FY_START_MONTH = 4
+
+# Ask-anything model (needs ANTHROPIC_API_KEY; the app degrades gracefully without it).
+CHAT_MODEL = os.environ.get("KESTREL_CHAT_MODEL", "claude-sonnet-5")
