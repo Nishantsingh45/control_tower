@@ -86,7 +86,12 @@ def arrival_date(vendor: str, ts: str) -> str:
 
 
 def main() -> None:
-    ANALYTICS_DB.unlink(missing_ok=True)
+    try:
+        ANALYTICS_DB.unlink(missing_ok=True)
+    except PermissionError:
+        sys.exit(f"{ANALYTICS_DB.name} is open in another process - probably the "
+                 "dashboard server. Stop `python server.py`, rerun this build, "
+                 "then start the server again.")
     # uri=True on the main connection so the read-only ATTACH URI below is honoured
     con = sqlite3.connect(f"file:{ANALYTICS_DB.as_posix()}?mode=rwc", uri=True)
     con.execute("PRAGMA journal_mode=OFF")
