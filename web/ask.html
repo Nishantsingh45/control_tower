@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ask AI · Kestrel Control Tower</title>
+<link rel="stylesheet" href="/app.css">
+</head>
+<body>
+<header class="topbar">
+  <a class="brand" href="/"><span class="logo">K</span>
+    <div><h1>Ask AI</h1><div class="sub">Plain-English questions, answered from the same numbers as the dashboard</div></div></a>
+  <div class="spacer"></div>
+  <span class="link" id="model-badge"></span>
+  <button class="btn ghost" id="clear-btn">Clear conversation</button>
+  <a class="btn light" href="/">← Dashboard</a>
+</header>
+
+<div class="ask-layout">
+  <aside class="ask-side">
+    <h3>Try asking</h3>
+    <div id="suggest"></div>
+    <h3>Pre-wired questions <span class="muted" style="text-transform:none;letter-spacing:0">(no API key needed)</span></h3>
+    <div id="canned"></div>
+    <p class="note" style="margin-top:14px">Every answer shows <b>what was measured</b>, the rows behind it, and the SQL that produced them. The AI can only read - never change - the data.</p>
+  </aside>
+
+  <section class="ask-main">
+    <div class="thread" id="thread"></div>
+    <div class="composer">
+      <div id="banner" class="banner hidden"></div>
+      <div class="box">
+        <textarea id="ask-input" rows="1" placeholder='Ask in plain English, e.g. "why did fill rate drop in the West last month?"'></textarea>
+        <button class="btn" id="ask-btn">Ask</button>
+      </div>
+      <div class="hint">Enter to send · Shift+Enter for a new line · answers take 10-30 seconds</div>
+    </div>
+  </section>
+</div>
+<div class="tip" id="tip"></div>
+
+<script src="/common.js"></script>
+<script>
+"use strict";
+const SUGGESTIONS = [
+  "Why did fill rate drop in the West last month?",
+  "Which five outlets had the lowest fill rate last month, excluding closed and test outlets?",
+  "What was OTIF by region for the last complete quarter?",
+  "Which categories drive the largest value of returns, and what is the leading reason?",
+  "Temperature excursions per hundred chilled deliveries, by month",
+  "Which routes are more than two hours late on more than one delivery in ten?",
+  "How much have we lost to orders on discontinued SKUs?",
+  "Freight cost per delivered case, by warehouse, for the last quarter",
+  "For our top twenty SKUs by value, how does our MRP compare with the lowest competitor price in Mumbai?",
+  "Which warehouse is dragging down the company's fill rate the most?",
+];
+const KEY = "kestrel-ask-thread";
+let thread = [];
+try { thread = JSON.parse(sessionStorage.getItem(KEY) || "[]"); } catch (e) { thread = []; }
+const save = () => { try { sessionStorage.setItem(KEY, JSON.stringify(thread.slice(-30))); } catch (e) {} };
+
+function welcome() {
+  return `<div class="msg bot"><div class="who">Kestrel · Ask AI</div>
+    <div class="answer">Ask me anything about service, cold chain, money or prices. I write a query against the
+    cleaned analytics tables, run it, and answer from the rows that come back - so every figure is real and
+    you can open the data or the SQL under any answer. If the data cannot answer a question, I will say so.</div></div>`;
+}
+
+function card(res) {
+  if (res.error) return `<div class="msg bot error"><div class="who">Kestrel · Ask AI</div><div class="answer">⚠ ${esc(res.message || res.error)}</div></div>`;
+  const n = res.rows ? res.rows.length : 0;
+  const isCannot = res.status === "cannot", isErr = res.status === "error";
+  let h = `<div class="msg bot${isErr ? " error" : ""}"><div class="who">Kestrel · Ask AI${res.sql === null ? " · pre-wired" : ""}</div>
+    <div class="answer">${esc(res.answer || "").replace(/\n/g, "<br>")}</div>`;
+  if (res.measures) h += `<div class="measures"><b>Measured as:</b> ${esc(res.measures)}</div>`;
+  if (!isCannot && (n || res.sql)) {
+    h += `<div class="actions">` +
+      (n ? `<button data-toggle="data">Show data (${n} row${n === 1 ? "" : "s"}${res.truncated ? ", capped" : ""})</button>` : "") +
+      (res.sql ? `<button data-toggle="sql">Show SQL</button>` : "") + `</div>`;
+    if (n) h += `<div class="data hidden">${rowsToTable(res.rows, { total: Object.keys(res.rows[0])[0] })}</div>`;
+    if (res.sql) h += `<pre class="sql hidden">${esc(res.sql)}</pre>`;
+  }
+  return h + `</div>`;
+}
+
+function render() {
+  const t = $("thread");
+  t.innerHTML = welcome() + thread.map(m => `<div class="msg user">${esc(m.q)}</div>${card(m.res)}`).join("");
+  t.scrollTop = t.scrollHeight;
+}
+$("thread").addEventListener("click", ev => {
+  const b = ev.target.closest("button[data-toggle]"); if (!b) return;
+  const box = b.closest(".msg").querySelector("." + b.dataset.toggle);
+  box.classList.toggle("hidden"); b.classList.toggle("on", !box.classList.contains("hidden"));
+});
+
+async function send(q, canned) {
+  q = (q || "").trim(); if (!q) return;
+  $("ask-input").value = ""; autosize();
+  $("ask-btn").disabled = true;
+  const t = $("thread");
+  t.insertAdjacentHTML("beforeend", `<div class="msg user">${esc(q)}</div>
+    <div class="msg bot" id="pending"><div class="who">Kestrel · Ask AI</div><div class="answer"><span class="spin"></span> ${canned ? "running the dashboard query…" : "writing and running the query…"}</div></div>`);
+  t.scrollTop = t.scrollHeight;
+  let res;
+  try {
+    res = canned
+      ? await api("/api/canned", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: q }) })
+      : await api("/api/ask", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ question: q }) });
+  } catch (e) { res = { error: "network", message: "Request failed: " + e }; }
+  $("pending")?.remove();
+  thread.push({ q, res }); save(); render();
+  $("ask-btn").disabled = false; $("ask-input").focus();
+}
+
+function autosize() { const ta = $("ask-input"); ta.style.height = "auto"; ta.style.height = Math.min(ta.scrollHeight, 160) + "px"; }
+
+(async function boot() {
+  const m = await api("/api/meta");
+  $("model-badge").textContent = m.has_chat ? `model: ${m.chat_model}` : "no API key";
+  if (!m.has_chat) {
+    const b = $("banner"); b.classList.remove("hidden");
+    b.innerHTML = "<b>Free-text questions need an API key.</b> Put <code>ANTHROPIC_API_KEY=sk-ant-…</code> in <code>control_tower/.env</code> and restart the server. The pre-wired questions on the left work without one.";
+  }
+  $("suggest").innerHTML = SUGGESTIONS.map(s => `<button class="chip" data-q="${esc(s)}">${esc(s)}</button>`).join("");
+  const cq = await api("/api/canned");
+  $("canned").innerHTML = cq.questions.map(c => `<button class="chip canned" data-canned="${esc(c.name)}" title="${esc(c.measures)}">${esc(c.name)}</button>`).join("");
+  document.querySelector(".ask-side").addEventListener("click", ev => {
+    const b = ev.target.closest("button"); if (!b) return;
+    if (b.dataset.canned) send(b.dataset.canned, true);
+    else if (b.dataset.q) { if (m.has_chat) send(b.dataset.q); else { $("ask-input").value = b.dataset.q; autosize(); $("ask-input").focus(); } }
+  });
+  $("ask-btn").onclick = () => send($("ask-input").value);
+  $("ask-input").addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send($("ask-input").value); } });
+  $("ask-input").addEventListener("input", autosize);
+  $("clear-btn").onclick = () => { thread = []; save(); render(); };
+  render();
+  /* deep link: /ask?q=... asks immediately (or prefills when there is no key) */
+  const q = new URLSearchParams(location.search).get("q");
+  if (q) { history.replaceState(null, "", "/ask"); if (m.has_chat) send(q); else { $("ask-input").value = q; autosize(); } }
+})();
+</script>
+</body>
+</html>

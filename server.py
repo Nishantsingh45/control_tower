@@ -1,6 +1,7 @@
 """Kestrel Control Tower - FastAPI backend + static web UI.
 
-    python server.py            # http://localhost:8500
+    python server.py            # http://localhost:8500  (dashboard)
+                                # http://localhost:8500/ask  (Ask AI)
 
 Plain JSON endpoints over metrics.py (the single source of KPI truth) and one
 POST endpoint for the ask-anything chat. The frontend is dependency-free
@@ -17,17 +18,22 @@ from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
 
 import asksql
 import metrics as M
-from config import IN_FULL_THRESHOLD, ON_TIME_GRACE_MIN, REPO_ROOT
+from config import CHAT_MODEL, IN_FULL_THRESHOLD, KPI_TARGETS, ON_TIME_GRACE_MIN, REPO_ROOT
 
 WEB = Path(__file__).parent / "web"
 app = FastAPI(title="Kestrel Control Tower")
 
-LAST_FULL_MONTH = "2026-06"
+LAST_FULL_MONTH = asksql.LAST_MONTH
 
 
 def j(frame: pd.DataFrame) -> list[dict]:
     """DataFrame -> JSON-safe records (NaN becomes null)."""
     return json.loads(frame.to_json(orient="records"))
+
+
+def jnum(obj) -> JSONResponse:
+    """dict with numpy floats / NaN -> JSON with nulls."""
+    return JSONResponse(json.loads(json.dumps(obj, default=float).replace("NaN", "null")))
 
 
 def parse_region(region_id: str | None) -> int | None:
@@ -40,18 +46,26 @@ def index():
     return FileResponse(WEB / "index.html")
 
 
+@app.get("/ask")
+def ask_page():
+    return FileResponse(WEB / "ask.html")
+
+
 @app.get("/api/meta")
 def meta():
     con = M.connect()
     return {
         "quarters": M.quarters(con),
         "regions": j(M.regions(con)),
-        "default_quarter": "FY27 Q1",
+        "default_quarter": asksql.LAST_QUARTER,
+        "last_month": LAST_FULL_MONTH,
         "has_freight": M.has_table(con, "fct_freight"),
         "has_price": M.has_table(con, "price_observation"),
         "has_chat": asksql.get_client() is not None,
+        "chat_model": CHAT_MODEL,
         "in_full_threshold": IN_FULL_THRESHOLD,
         "on_time_grace_min": ON_TIME_GRACE_MIN,
+        "kpi_targets": KPI_TARGETS,
         "build": j(M.df(con, "select * from meta_build")),
     }
 
@@ -59,11 +73,14 @@ def meta():
 @app.get("/api/kpis")
 def kpis(quarter: str | None = None, region_id: str | None = None, uom: str = "each"):
     con = M.connect()
-    k = M.kpi_summary(con, quarter, parse_region(region_id), uom)
-    other = M.kpi_summary(con, quarter, parse_region(region_id),
-                          "case" if uom == "each" else "each")
+    r = parse_region(region_id)
+    k = M.kpi_summary(con, quarter, r, uom)
+    other = M.kpi_summary(con, quarter, r, "case" if uom == "each" else "each")
     k["fill_rate_other_basis_pct"] = other["fill_rate_pct"]
-    return JSONResponse(json.loads(json.dumps(k, default=float).replace("NaN", "null")))
+    prev_q = M.previous_quarter(con, quarter)
+    k["prev_quarter"] = prev_q
+    k["prev"] = M.kpi_summary(con, prev_q, r, uom) if prev_q else None
+    return jnum(k)
 
 
 @app.get("/api/service")
@@ -73,7 +90,9 @@ def service(quarter: str | None = None, region_id: str | None = None, uom: str =
     trend = M.monthly_service_trend(con, r, uom)
     return {
         "worst_outlets": j(M.worst_outlets(con, quarter, r, uom)),
+        "worst_outlets_10": j(M.worst_outlets(con, quarter, r, uom, n=10)),
         "worst_routes": j(M.worst_routes(con, quarter, r)),
+        "late_routes": j(M.late_routes(con, quarter, r)),
         "warehouses": j(M.worst_warehouses(con, quarter, r, uom)),
         "regions": j(M.fill_by_region(con, quarter, uom)),
         "trend": j(trend[trend.month_label <= LAST_FULL_MONTH]),
@@ -100,10 +119,14 @@ def coldchain(quarter: str | None = None, region_id: str | None = None):
 def money(quarter: str | None = None, region_id: str | None = None):
     con = M.connect()
     r = parse_region(region_id)
+    disc = M.discontinued_still_ordered(con, quarter)
     out = {
         "returns_by_category": j(M.returns_by_category(con, quarter, r)),
         "returns_by_reason": j(M.returns_by_reason(con, quarter, r)),
-        "discontinued": j(M.discontinued_still_ordered(con, quarter).head(10)),
+        "discontinued": j(disc.head(10)),
+        "discontinued_total_lakh": float(disc.value_lakh.sum()) if len(disc) else 0.0,
+        "discontinued_lines": int(disc.lines_after_discontinuation.sum()) if len(disc) else 0,
+        "discontinued_skus": int(len(disc)),
         "freight_by_warehouse": [], "freight_by_carrier": [],
     }
     if M.has_table(con, "fct_freight"):
@@ -120,17 +143,19 @@ def price(city: str | None = None):
     gap = M.price_position_by_city_category(con)
     cities = sorted(gap.city.unique().tolist())
     city = city or (cities[0] if cities else None)
-    unmatched = M.df(con, """select count(*) as n from price_listing
-                             where product_id is null""").iloc[0, 0]
+    counts = M.df(con, """select sum(product_id is not null) as matched,
+                                 sum(product_id is null) as unmatched,
+                                 sum(match_confidence < 1) as fuzzy
+                          from price_listing""").iloc[0]
     return {
         "available": True,
         "cities": cities,
         "city": city,
         "gap": j(gap),
         "top_skus": j(M.mrp_vs_lowest_competitor(con, city=city)),
-        "matched": int(M.df(con, "select count(*) n from price_listing "
-                                 "where product_id is not null").iloc[0, 0]),
-        "unmatched": int(unmatched),
+        "matched": int(counts.matched or 0),
+        "unmatched": int(counts.unmatched or 0),
+        "fuzzy": int(counts.fuzzy or 0),
     }
 
 
@@ -160,7 +185,7 @@ def findings():
 
 @app.get("/api/canned")
 def canned_list():
-    return {"questions": list(asksql.CANNED)}
+    return {"questions": [{"name": k, "measures": v[0]} for k, v in asksql.CANNED.items()]}
 
 
 @app.post("/api/canned")
@@ -168,8 +193,13 @@ def canned_run(payload: dict = Body(...)):
     name = payload.get("name")
     if name not in asksql.CANNED:
         return JSONResponse({"error": "unknown question"}, status_code=400)
+    measures, fn = asksql.CANNED[name]
     con = M.connect()
-    return {"rows": j(asksql.CANNED[name](con))}
+    frame = fn(con)
+    return {"status": "ok", "question": name, "measures": measures,
+            "rows": j(frame), "sql": None, "truncated": False,
+            "answer": f"Pre-wired answer ({len(frame)} row{'s' if len(frame) != 1 else ''}) - "
+                      "the table below is the same query the dashboard runs."}
 
 
 @app.post("/api/ask")
@@ -186,9 +216,11 @@ def api_ask(payload: dict = Body(...)):
     try:
         import anthropic
         con = M.connect()
-        sql, frame, answer = asksql.ask(client, con, question)
-        return {"sql": sql, "rows": j(frame) if frame is not None else None,
-                "answer": answer}
+        res = asksql.ask(client, con, question)
+        rows = res.pop("rows")
+        res["rows"] = j(rows) if rows is not None else None
+        res["question"] = question
+        return res
     except anthropic.AuthenticationError:
         return {"error": "no_key", "message": "The API key was rejected - check "
                                               "ANTHROPIC_API_KEY in .env."}
@@ -210,5 +242,5 @@ def static_files(path: str):
 
 
 if __name__ == "__main__":
-    print("Kestrel Control Tower -> http://localhost:8500")
+    print("Kestrel Control Tower -> http://localhost:8500   (Ask AI: /ask)")
     uvicorn.run(app, host="127.0.0.1", port=8500, log_level="warning")

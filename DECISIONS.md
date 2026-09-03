@@ -55,5 +55,12 @@ the title-based SKU matcher (100% here, but only after building a rewrite
 table for retailer abbreviations like "Inst."/"Frzn" — real listings will not
 match this cleanly) degrades as competitors reword titles; production needs a
 curated mapping table with confidence decay and review of the unmatched bucket.
-Third: the chat depends on an external LLM API — it degrades to pre-wired
-questions, but a production version needs caching, evals and a query allowlist.
+Third: the chat. Grounding answers in SQL that really runs stops invented
+numbers, but not a plausible query for the wrong question — the first version
+priced "orders on discontinued SKUs" at the lifetime value of every SKU that is
+discontinued today (real rows, 8× too big). The fix is structural, not a
+prompt tweak: the dashboard's own metric definitions are in the prompt as
+reference queries, every answer states what it measured, the model may decline
+unanswerable questions, and `eval_chat.py` re-checks twelve questions against
+`metrics.py`. It still depends on an external API and degrades to pre-wired
+questions without one; production needs the eval in CI and a query allowlist.

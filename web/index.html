@@ -4,432 +4,306 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Kestrel Control Tower</title>
-<style>
-  /* Committed light design; every surface painted explicitly. */
-  :root{
-    --bg:#f4f5f7; --card:#ffffff; --line:#e4e7ec;
-    --ink:#16212e; --ink2:#5b6675; --ink3:#8b93a1;
-    --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a;      /* validated categorical slots */
-    --bad:#c23934; --good:#0d7a44;
-    --radius:10px; --shadow:0 1px 2px rgba(22,33,46,.06);
-  }
-  *{box-sizing:border-box}
-  body{margin:0;background:var(--bg);color:var(--ink);
-       font:14px/1.45 -apple-system,"Segoe UI",Roboto,Arial,sans-serif}
-  header{background:#12263f;color:#fff;padding:10px 22px;display:flex;
-         align-items:center;gap:18px;flex-wrap:wrap;position:sticky;top:0;z-index:5}
-  header h1{font-size:16px;margin:0;font-weight:600;letter-spacing:.2px}
-  header .sub{color:#9fb3c8;font-size:12px}
-  header .controls{margin-left:auto;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
-  select,button,input,textarea{font:inherit}
-  select{background:#1d3a5f;color:#fff;border:1px solid #33517a;border-radius:6px;padding:5px 8px}
-  .seg{display:flex;border:1px solid #33517a;border-radius:6px;overflow:hidden}
-  .seg button{background:#1d3a5f;color:#cdd9e8;border:0;padding:5px 12px;cursor:pointer}
-  .seg button.on{background:#2a78d6;color:#fff}
-  main{max-width:1240px;margin:0 auto;padding:18px 22px 60px}
-  .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:14px}
-  .tile{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
-        padding:12px 14px;box-shadow:var(--shadow)}
-  .tile .lbl{color:var(--ink2);font-size:12px}
-  .tile .val{font-size:26px;font-weight:650;margin:2px 0;font-variant-numeric:tabular-nums}
-  .tile .sub{color:var(--ink3);font-size:12px}
-  nav.tabs{display:flex;gap:2px;margin:6px 0 14px;border-bottom:2px solid var(--line);flex-wrap:wrap}
-  nav.tabs button{background:none;border:0;padding:9px 14px;color:var(--ink2);cursor:pointer;
-                  border-bottom:2px solid transparent;margin-bottom:-2px;font-weight:550}
-  nav.tabs button.on{color:var(--s1);border-color:var(--s1)}
-  .panel{display:none}.panel.on{display:block}
-  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
-  @media(max-width:980px){.grid2{grid-template-columns:1fr}}
-  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
-        padding:14px 16px;box-shadow:var(--shadow);margin-bottom:14px;overflow-x:auto}
-  .card h3{margin:0 0 8px;font-size:13.5px;font-weight:650}
-  .card .note{color:var(--ink3);font-size:12px;margin-top:8px}
-  table{border-collapse:collapse;width:100%;font-size:13px;font-variant-numeric:tabular-nums}
-  th{color:var(--ink2);text-align:left;font-weight:600;border-bottom:1.5px solid var(--line);
-     padding:5px 8px;white-space:nowrap}
-  td{border-bottom:1px solid var(--line);padding:5px 8px;white-space:nowrap}
-  tr:last-child td{border-bottom:0}
-  td.num,th.num{text-align:right}
-  .legend{display:flex;gap:14px;font-size:12px;color:var(--ink2);margin:2px 0 6px}
-  .legend .k{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px}
-  svg text{font:11px -apple-system,"Segoe UI",Roboto,sans-serif;fill:var(--ink3)}
-  .tip{position:fixed;pointer-events:none;background:#16212e;color:#fff;border-radius:6px;
-       padding:6px 9px;font-size:12px;display:none;z-index:20;white-space:nowrap}
-  .banner{background:#fff7ed;border:1px solid #fdba74;color:#7c2d12;border-radius:8px;
-          padding:9px 12px;font-size:13px;margin-bottom:12px}
-  .chat-log{display:flex;flex-direction:column;gap:10px;margin-bottom:12px}
-  .msg{max-width:860px;border-radius:10px;padding:10px 13px}
-  .msg.user{background:#e8f0fb;align-self:flex-end}
-  .msg.bot{background:var(--card);border:1px solid var(--line);align-self:flex-start;width:100%}
-  .msg pre{background:#0f1b2a;color:#cfe3fa;border-radius:7px;padding:10px;overflow-x:auto;
-           font:12px/1.5 ui-monospace,Consolas,monospace}
-  .askrow{display:flex;gap:8px}
-  .askrow input{flex:1;border:1px solid var(--line);border-radius:8px;padding:10px 12px;background:#fff;color:var(--ink)}
-  .askrow button,.btn{background:var(--s1);border:0;color:#fff;border-radius:8px;
-                      padding:10px 16px;cursor:pointer;font-weight:600}
-  .askrow button:disabled{opacity:.5}
-  .muted{color:var(--ink3)}
-  .md h2{font-size:15px;margin:18px 0 6px}
-  .md blockquote{border-left:3px solid var(--s1);margin:6px 0;padding:2px 12px;color:var(--ink2);background:#f8fafc}
-  .md code{background:#eef1f5;border-radius:4px;padding:1px 5px;font:12px ui-monospace,Consolas,monospace}
-  .hm td{text-align:right}
-  .spin{display:inline-block;width:14px;height:14px;border:2px solid #cdd9e8;border-top-color:var(--s1);
-        border-radius:50%;animation:sp .8s linear infinite;vertical-align:-2px}
-  @keyframes sp{to{transform:rotate(360deg)}}
-</style>
+<link rel="stylesheet" href="/app.css">
 </head>
 <body>
-<header>
-  <div><h1>Kestrel Control Tower</h1><div class="sub" id="subtitle">loading…</div></div>
-  <div class="controls">
-    <select id="quarter" title="Fiscal quarter (Apr–Mar year)"></select>
-    <select id="region"></select>
-    <div class="seg" title="Customers penalise on units (eaches); ops has always reported cases">
-      <button id="uom-each" class="on">eaches</button><button id="uom-case">cases</button>
-    </div>
-  </div>
+<header class="topbar">
+  <a class="brand" href="/"><span class="logo">K</span>
+    <div><h1>Kestrel Control Tower</h1><div class="sub">One screen, one set of numbers</div></div></a>
+  <div class="spacer"></div>
+  <a class="link" href="#" data-goto="health">Data health</a>
+  <a class="btn" href="/ask">✦ Ask AI</a>
 </header>
-<main>
-  <div class="tiles" id="tiles"></div>
-  <nav class="tabs" id="tabs">
-    <button data-p="service" class="on">Service</button>
-    <button data-p="cold">Cold chain</button>
-    <button data-p="money">Money</button>
-    <button data-p="price">Price position</button>
-    <button data-p="ask">Ask anything</button>
-    <button data-p="health">Data health</button>
-  </nav>
 
-  <section class="panel on" id="p-service">
+<div class="filters">
+  <label>Quarter <select id="quarter" title="Fiscal quarters - the year runs April to March"></select></label>
+  <label>Region <select id="region"></select></label>
+  <label>Count units as
+    <span class="seg"><button id="uom-each" class="on">eaches</button><button id="uom-case">cases</button></span>
+    <span class="help" title="Eaches = consumer units, how customers penalise us. Cases = how ops has always reported. Both are computed on every line; this switches fill-rate figures only.">?</span>
+  </label>
+  <div class="period" id="period"></div>
+</div>
+
+<nav class="tabs" id="tabs">
+  <button data-p="overview" class="on">Overview</button>
+  <button data-p="service">Service</button>
+  <button data-p="cold">Cold chain</button>
+  <button data-p="money">Money</button>
+  <button data-p="price">Prices vs competitors</button>
+  <button data-p="health">Data health</button>
+</nav>
+
+<main>
+  <!-- ================= OVERVIEW ================= -->
+  <section class="panel on" id="p-overview">
+    <div class="intro"><h2>Where are we losing service, and where are we losing money?</h2>
+      <p>Green / amber / red against the targets in <code>config.py</code>. Every number here is the same one the Ask AI page uses.</p></div>
+    <div class="tiles" id="tiles"></div>
     <div class="grid2">
-      <div class="card"><h3 id="h-outlets">Lowest fill-rate outlets</h3><div id="t-outlets"></div></div>
-      <div class="card"><h3>Lowest OTIF routes</h3><div id="t-routes"></div></div>
-      <div class="card"><h3>Warehouses by fill rate</h3><div id="t-wh"></div></div>
-      <div class="card"><h3>Regions</h3><div id="t-regions"></div></div>
+      <div class="card"><h3>Outlets getting the worst service</h3>
+        <p class="caption">Lowest fill rate this quarter. Test, closed and deleted outlets are excluded; so are outlets below 500 units ordered.</p>
+        <div class="scroll" id="t-outlets"></div></div>
+      <div class="card"><h3>Routes delivering latest</h3>
+        <p class="caption">Lowest OTIF this quarter - deliveries both on time (within 30 min) and at least 90% complete.</p>
+        <div class="scroll" id="t-routes"></div></div>
     </div>
-    <div class="card"><h3>18-month trend — fill rate &amp; OTIF (%)</h3>
-      <div class="legend"><span><i class="k" style="background:var(--s1)"></i>Fill rate</span>
-        <span><i class="k" style="background:var(--s2)"></i>OTIF</span></div>
+    <div class="card"><h3>Fill rate and OTIF over the last 18 months</h3>
+      <p class="caption">Monthly, for the selected region. Hover for the exact figures.</p>
+      <div class="legend"><span><i class="k" style="background:#2a78d6"></i>Fill rate</span>
+        <span><i class="k" style="background:#eb6834"></i>OTIF</span></div>
       <div id="c-trend"></div>
       <div class="note" id="n-open"></div>
     </div>
   </section>
 
+  <!-- ================= SERVICE ================= -->
+  <section class="panel" id="p-service">
+    <div class="intro"><h2>Service</h2><p>Fill rate = units delivered ÷ units ordered, on delivered and partial orders. OTIF = on time and in full.</p></div>
+    <div class="grid2">
+      <div class="card"><h3>By region</h3><p class="caption">Sorted worst first.</p><div class="scroll" id="t-regions"></div></div>
+      <div class="card"><h3>By warehouse</h3><p class="caption">Sorted worst first.</p><div class="scroll" id="t-wh"></div></div>
+    </div>
+    <div class="grid2">
+      <div class="card"><h3>Ten outlets with the lowest fill rate</h3>
+        <p class="caption">Excludes test, closed and deleted outlets and outlets below 500 units ordered.</p>
+        <div class="scroll" id="t-outlets10"></div></div>
+      <div class="card"><h3>Routes late by more than two hours on over 10% of deliveries</h3>
+        <p class="caption">Share of each route's deliveries that arrived more than 120 minutes after plan.</p>
+        <div class="scroll" id="t-late"></div></div>
+    </div>
+  </section>
+
+  <!-- ================= COLD CHAIN ================= -->
   <section class="panel" id="p-cold">
+    <div class="intro"><h2>Cold chain</h2><p>Where money quietly disappears: temperature breaches, stock about to expire, and the returns they cause.</p></div>
     <div class="grid2">
-      <div class="card"><h3>Temperature excursions per 100 chilled deliveries</h3><div id="c-exc"></div></div>
-      <div class="card">
-        <div class="tile" style="border:0;box-shadow:none;padding:0">
-          <div class="lbl">Chilled deliveries on NON-reefer vehicles</div>
-          <div class="val" id="v-amb">–</div>
-          <div class="sub">the structural cold-chain risk (FINDINGS F16)</div>
-        </div>
-        <div class="note">A “chilled delivery” carries ≥1 chilled SKU. Excursion flags on
-          fully-ambient loads (391) are excluded as physically meaningless.</div>
-      </div>
+      <div class="card"><h3>Temperature excursions per 100 chilled deliveries</h3>
+        <p class="caption">A chilled delivery is one carrying at least one chilled product. Monthly, selected region.</p>
+        <div id="c-exc"></div></div>
+      <div class="card"><h3>Chilled stock travelling on non-refrigerated vehicles</h3>
+        <p class="caption">Share of chilled deliveries that ran on a route without a reefer.</p>
+        <div class="hero" id="v-amb">–</div>
+        <div class="hero-sub">of chilled deliveries, selected region and period</div>
+        <div class="note">This is the structural risk behind most excursions: the product was chilled, the truck was not. Excursion flags on loads with no chilled product (391 in total) are ignored as physically meaningless.</div></div>
     </div>
-    <div class="card"><h3>Stock at risk — expiring within 30 days (latest snapshot)</h3><div id="t-expiry"></div></div>
-    <div class="card"><h3>Cold-chain and expiry returns</h3><div id="t-coldret"></div></div>
+    <div class="card"><h3>Stock at risk - expiring within 30 days</h3>
+      <p class="caption">Latest weekly stock snapshot, by warehouse and category, valued at list price. Company-wide (stock is not held by region).</p>
+      <div class="scroll" id="t-expiry"></div></div>
+    <div class="card"><h3>Returns caused by cold-chain failure and expiry</h3>
+      <p class="caption">Credit notes with reason "Cold chain breach" or "Near expiry", selected period and region.</p>
+      <div class="scroll" id="t-coldret"></div></div>
   </section>
 
+  <!-- ================= MONEY ================= -->
   <section class="panel" id="p-money">
+    <div class="intro"><h2>Money</h2><p>Returns and credit notes, leakage from discontinued products, and what freight really costs per case (from carrier invoices, never driver-entered fuel).</p></div>
     <div class="grid2">
-      <div class="card"><h3>Returns value by category (₹ lakh)</h3><div id="c-retcat"></div><div id="t-retcat"></div></div>
-      <div>
-        <div class="card"><h3>Returns by reason</h3><div id="t-retreason"></div></div>
-        <div class="card"><h3>Leakage — discontinued SKUs still being ordered</h3><div id="t-disc"></div></div>
-      </div>
+      <div class="card"><h3>Returns by product category</h3>
+        <p class="caption">Credit-note value, ₹ lakh, selected period and region.</p>
+        <div id="c-retcat"></div></div>
+      <div class="card"><h3>Returns by reason</h3>
+        <p class="caption">What customers send back, and why.</p>
+        <div class="scroll" id="t-retreason"></div></div>
     </div>
+    <div class="card"><h3>Leakage - orders still being taken for discontinued products</h3>
+      <p class="caption">Nothing blocks a discontinued SKU at order entry. Value of order lines placed <b>after</b> the product's discontinuation date.</p>
+      <div class="hero" id="v-disc">–</div>
+      <div class="hero-sub" id="v-disc-sub"></div>
+      <div class="scroll" style="margin-top:10px" id="t-disc"></div></div>
     <div class="grid2">
-      <div class="card"><h3>Freight cost per delivered case, by warehouse</h3><div id="t-frwh"></div>
-        <div class="note">Warehouse × month grain — invoices carry no delivery key.
-          Driver-entered fuel costs are not used anywhere.</div></div>
-      <div class="card"><h3>Freight by carrier</h3><div id="t-frcar"></div></div>
+      <div class="card"><h3>Freight cost per delivered case, by warehouse</h3>
+        <p class="caption">Carrier invoices ÷ cases delivered. Company-wide by warehouse - invoices carry no region or delivery key.</p>
+        <div class="scroll" id="t-frwh"></div></div>
+      <div class="card"><h3>Freight by carrier</h3>
+        <p class="caption">Invoiced amount, selected period.</p>
+        <div class="scroll" id="t-frcar"></div></div>
     </div>
   </section>
 
+  <!-- ================= PRICES ================= -->
   <section class="panel" id="p-price">
-    <div class="card"><h3>Competitor price vs our MRP — average gap by city &amp; category</h3>
-      <div id="t-gap"></div><div class="note" id="n-price"></div></div>
-    <div class="card"><h3 id="h-sku">Top 20 SKUs by sales — our MRP vs lowest observed price</h3>
-      <div style="margin-bottom:8px"><select id="city" style="background:#fff;color:var(--ink);border:1px solid var(--line)"></select></div>
-      <div id="t-sku"></div></div>
+    <div class="intro"><h2>Prices vs competitors</h2><p>Our MRP against what competitors actually charge on the shelf, from the BazaarPulse price tracker. Replaces the weekly WhatsApp screenshots.</p></div>
+    <div class="card"><h3>Average gap between competitor shelf price and our MRP</h3>
+      <p class="caption">By city and category. <b>Red</b> = competitors sell below our MRP (they undercut us); <b>blue</b> = they sell above it.</p>
+      <div class="scroll" id="t-gap"></div><div class="note" id="n-price"></div></div>
+    <div class="card"><h3 id="h-sku">Our 20 biggest-selling products - MRP vs the lowest competitor price</h3>
+      <p class="caption">Blank = that product was not seen on the tracker in this city.</p>
+      <div style="margin-bottom:10px"><label class="small muted">City <select id="city" style="background:#fff;color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:5px 10px"></select></label></div>
+      <div class="scroll" id="t-sku"></div></div>
   </section>
 
-  <section class="panel" id="p-ask">
-    <div class="banner" id="ask-banner" style="display:none"></div>
-    <div class="card">
-      <h3>Ask in plain English</h3>
-      <div class="note" style="margin:0 0 10px">Answers are generated as SQL against the same
-        cleaned tables the dashboard uses — every answer shows its SQL and rows.</div>
-      <div class="chat-log" id="chat-log"></div>
-      <div class="askrow">
-        <input id="ask-input" placeholder='e.g. "why did fill rate drop in the West last quarter?"'>
-        <button id="ask-btn">Ask</button>
-      </div>
-      <div style="margin-top:14px">
-        <span class="muted" style="font-size:12px">Pre-wired questions (no API key needed):</span>
-        <div class="askrow" style="margin-top:6px">
-          <select id="canned" style="flex:1;background:#fff;color:var(--ink);border:1px solid var(--line)"></select>
-          <button class="btn" id="canned-btn" style="background:var(--s3)">Run</button>
-        </div>
-        <div id="canned-out" style="margin-top:10px"></div>
-      </div>
-    </div>
-  </section>
-
+  <!-- ================= DATA HEALTH ================= -->
   <section class="panel" id="p-health">
+    <div class="intro"><h2>Data health</h2><p>What was cleaned, what was excluded, and what could not be matched - so nobody has to take the numbers on trust.</p></div>
     <div class="grid2">
-      <div class="card"><h3>Outlets excluded from rankings</h3><div id="t-excl"></div></div>
-      <div class="card"><h3>Build metadata</h3><div id="t-build"></div></div>
+      <div class="card"><h3>Outlets excluded from rankings</h3><p class="caption">They stay in historical totals.</p><div class="scroll" id="t-excl"></div></div>
+      <div class="card"><h3>Build metadata</h3><p class="caption">When the analytics layer was built, from which file.</p><div class="scroll" id="t-build"></div></div>
     </div>
-    <div class="card"><h3>Competitor listings we could NOT match to a SKU</h3><div id="t-unmatched"></div></div>
-    <div class="card md" id="t-findings"><h3>FINDINGS.md</h3><div class="spin"></div></div>
+    <div class="card"><h3>Competitor listings we could not match to a product</h3><div class="scroll" id="t-unmatched"></div></div>
+    <div class="card md" id="t-findings"><h3>Verified data findings</h3><span class="spin"></span></div>
   </section>
 </main>
 <div class="tip" id="tip"></div>
 
+<script src="/common.js"></script>
 <script>
 "use strict";
-const $ = id => document.getElementById(id);
-const C1 = "#2a78d6", C2 = "#eb6834";
-const state = { quarter: null, region_id: "", uom: "each" };
-const fmt = (v, d=1) => v==null ? "–" : Number(v).toLocaleString("en-IN",{maximumFractionDigits:d,minimumFractionDigits:0});
-const api = async (path, opts) => (await fetch(path, opts)).json();
+const state = { quarter: null, region_id: "", uom: "each", meta: null };
+const qs = () => `quarter=${encodeURIComponent(state.quarter)}&region_id=${state.region_id}&uom=${state.uom}`;
+const busy = (ids, on) => ids.forEach(id => $(id).closest(".card, .tiles")?.classList.toggle("loading", on));
 
-/* ---------- generic table ---------- */
-function table(el, rows, headers) {
-  const host = typeof el === "string" ? $(el) : el;
-  if (!rows || !rows.length) { host.innerHTML = '<div class="muted">no rows</div>'; return; }
-  const cols = Object.keys(rows[0]);
-  const numeric = cols.map(c => rows.every(r => r[c]==null || typeof r[c]==="number"));
-  let h = "<table><thead><tr>" + cols.map((c,i) =>
-    `<th class="${numeric[i]?'num':''}">${(headers&&headers[c])||c.replaceAll("_"," ")}</th>`).join("") + "</tr></thead><tbody>";
-  for (const r of rows) h += "<tr>" + cols.map((c,i) =>
-    `<td class="${numeric[i]?'num':''}">${numeric[i]?fmt(r[c],2):(r[c]??"–")}</td>`).join("") + "</tr>";
-  host.innerHTML = h + "</tbody></table>";
-}
-
-/* ---------- SVG line chart (shared y-axis, % values) ---------- */
-function lineChart(el, rows, xKey, series, opts={}) {
-  const host = typeof el === "string" ? $(el) : el;
-  if (!rows || !rows.length) { host.innerHTML = '<div class="muted">no data</div>'; return; }
-  const W = Math.max(host.clientWidth || 640, 420), H = opts.h || 230,
-        P = {l:38, r:12, t:10, b:24};
-  const xs = rows.map(r => r[xKey]);
-  let vals = [];
-  series.forEach(s => rows.forEach(r => { if (r[s.key]!=null) vals.push(r[s.key]); }));
-  let lo = Math.min(...vals), hi = Math.max(...vals);
-  if (opts.zero) lo = Math.min(lo, 0);
-  const pad = (hi-lo)*0.1 || 1; lo -= pad; hi += pad;
-  const X = i => P.l + i*(W-P.l-P.r)/Math.max(xs.length-1,1);
-  const Y = v => P.t + (hi-v)*(H-P.t-P.b)/(hi-lo);
-  let g = "";
-  for (let k=0;k<=4;k++){ const v = lo + (hi-lo)*k/4, y = Y(v);
-    g += `<line x1="${P.l}" y1="${y}" x2="${W-P.r}" y2="${y}" stroke="#edf0f4"/>`+
-         `<text x="${P.l-6}" y="${y+3.5}" text-anchor="end">${fmt(v,1)}</text>`; }
-  const step = Math.ceil(xs.length/8);
-  xs.forEach((x,i)=>{ if(i%step===0||i===xs.length-1)
-    g += `<text x="${X(i)}" y="${H-6}" text-anchor="middle">${x.slice(2)}</text>`; });
-  series.forEach(s => {
-    const d = rows.map((r,i)=>`${i?"L":"M"}${X(i).toFixed(1)},${Y(r[s.key]).toFixed(1)}`).join("");
-    g += `<path d="${d}" fill="none" stroke="${s.color}" stroke-width="2" stroke-linejoin="round"/>`;
-  });
-  g += `<line id="xh" x1="0" y1="${P.t}" x2="0" y2="${H-P.b}" stroke="#b9c2cf" stroke-dasharray="3,3" style="display:none"/>`;
-  series.forEach((s,si)=>{ g += `<circle id="dot${si}" r="4" fill="${s.color}" stroke="#fff" stroke-width="1.5" style="display:none"/>`; });
-  host.innerHTML = `<svg width="100%" viewBox="0 0 ${W} ${H}" style="display:block">${g}</svg>`;
-  const svg = host.firstChild, tip = $("tip");
-  svg.addEventListener("mousemove", ev => {
-    const box = svg.getBoundingClientRect();
-    const mx = (ev.clientX-box.left)*W/box.width;
-    const i = Math.max(0, Math.min(xs.length-1, Math.round((mx-P.l)/((W-P.l-P.r)/Math.max(xs.length-1,1)))));
-    svg.querySelector("#xh").setAttribute("x1", X(i)); svg.querySelector("#xh").setAttribute("x2", X(i));
-    svg.querySelector("#xh").style.display = "";
-    let html = `<b>${xs[i]}</b>`;
-    series.forEach((s,si)=>{ const d = svg.querySelector("#dot"+si), v = rows[i][s.key];
-      if (v==null) { d.style.display="none"; return; }
-      d.setAttribute("cx",X(i)); d.setAttribute("cy",Y(v)); d.style.display="";
-      html += `<br><span style="color:${s.color}">●</span> ${s.name}: ${fmt(v,2)}${opts.unit||""}`; });
-    tip.innerHTML = html; tip.style.display="block";
-    tip.style.left = (ev.clientX+14)+"px"; tip.style.top = (ev.clientY+10)+"px";
-  });
-  svg.addEventListener("mouseleave", ()=>{ tip.style.display="none";
-    svg.querySelector("#xh").style.display="none";
-    series.forEach((s,si)=>svg.querySelector("#dot"+si).style.display="none"); });
-}
-
-/* ---------- horizontal bar chart (single hue = magnitude) ---------- */
-function barChart(el, rows, labelKey, valKey, unit="") {
-  const host = typeof el === "string" ? $(el) : el;
-  if (!rows || !rows.length) { host.innerHTML = '<div class="muted">no data</div>'; return; }
-  const max = Math.max(...rows.map(r=>r[valKey])) || 1;
-  host.innerHTML = rows.map(r => `
-    <div style="display:flex;align-items:center;gap:8px;margin:4px 0" title="${r[labelKey]}: ${fmt(r[valKey],1)}${unit}">
-      <div style="width:110px;color:var(--ink2);font-size:12px;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${r[labelKey]}</div>
-      <div style="flex:1;background:#eef1f5;border-radius:4px;height:16px;position:relative">
-        <div style="width:${(r[valKey]*100/max).toFixed(1)}%;background:${C1};height:16px;border-radius:4px"></div>
-      </div>
-      <div style="width:56px;font-size:12px;font-variant-numeric:tabular-nums">${fmt(r[valKey],1)}</div>
-    </div>`).join("");
-}
-
-/* ---------- loaders ---------- */
+/* ---------- KPI tiles ---------- */
 async function loadKpis() {
-  const q = `quarter=${encodeURIComponent(state.quarter)}&region_id=${state.region_id}&uom=${state.uom}`;
-  const k = await api(`/api/kpis?${q}`);
-  const other = state.uom==="each" ? "case" : "each";
+  const k = await api(`/api/kpis?${qs()}`), T = state.meta.kpi_targets, p = k.prev || {};
+  const other = state.uom === "each" ? "cases" : "eaches";
+  const unitWord = state.uom === "each" ? "units" : "cases";
+  const st = key => statusOf(key, k[key], T);
+  const status = key => { const s = st(key); return `<span class="status ${s.level}"><i></i>${s.text}</span>`; };
   const tiles = [
-    {l:`Fill rate (${state.uom}es)`, v:fmt(k.fill_rate_pct,1)+"%",
-     s:`${(k.fill_rate_pct-k.fill_rate_other_basis_pct>=0?"+":"")}${fmt(k.fill_rate_pct-k.fill_rate_other_basis_pct,2)}pt vs ${other} basis`},
-    {l:"OTIF", v:fmt(k.otif_pct,1)+"%", s:`on-time ${fmt(k.on_time_pct,0)}% · in-full ${fmt(k.in_full_pct,0)}%`},
-    {l:"Excursions / 100 chilled", v:fmt(k.excursions_per_100_chilled,1), s:"carries-chilled basis (F16)"},
-    {l:"Returns vs dispatch", v:fmt(k.returns_pct_of_dispatch,2)+"%", s:`₹${fmt(k.returns_value_inr/1e5,1)} lakh`},
-    {l:"Freight / delivered case",
-     v:k.freight_per_delivered_case_inr ? "₹"+fmt(k.freight_per_delivered_case_inr,1)
-        : (k.freight_inr ? "n/a by region" : "–"),
-     s:k.freight_inr ? `₹${fmt(k.freight_inr/1e7,1)} cr billed` : "run etl/fetch_freight.py"},
-    {l:"Open orders", v:fmt(k.open_orders,0), s:`₹${fmt(k.open_orders_value_inr/1e7,1)} cr — no delivery notes (F9)`},
+    { key: "fill_rate_pct", l: `Fill rate (${state.uom}es)`, v: pct(k.fill_rate_pct),
+      d: deltaHtml(k.fill_rate_pct, p.fill_rate_pct, { unit: " pt" }),
+      m: `Of every 100 ${unitWord} ordered, about ${fmt(k.fill_rate_pct, 0)} were delivered. In ${other}: ${pct(k.fill_rate_other_basis_pct)}.` },
+    { key: "otif_pct", l: "On time, in full (OTIF)", v: pct(k.otif_pct),
+      d: deltaHtml(k.otif_pct, p.otif_pct, { unit: " pt" }),
+      m: `Deliveries within ${state.meta.on_time_grace_min} min of plan AND at least ${Math.round(state.meta.in_full_threshold * 100)}% complete. On time alone: ${pct(k.on_time_pct, 0)}; in full alone: ${pct(k.in_full_pct, 0)}.` },
+    { key: "excursions_per_100_chilled", l: "Temperature breaches", v: fmt(k.excursions_per_100_chilled, 1),
+      d: deltaHtml(k.excursions_per_100_chilled, p.excursions_per_100_chilled, { higherIsBetter: false }),
+      m: "Per 100 deliveries carrying chilled product." },
+    { key: "returns_pct_of_dispatch", l: "Returns and credit notes", v: pct(k.returns_pct_of_dispatch, 2),
+      d: deltaHtml(k.returns_pct_of_dispatch, p.returns_pct_of_dispatch, { unit: " pt", digits: 2, higherIsBetter: false }),
+      m: `${money(k.returns_value_inr)} credited back, as a share of ${money(k.dispatch_value_inr)} dispatched.` },
+    { key: "freight", l: "Freight per delivered case",
+      v: k.freight_per_delivered_case_inr ? "₹" + fmt(k.freight_per_delivered_case_inr, 0) : (k.freight_inr ? "n/a by region" : "–"),
+      d: k.freight_per_delivered_case_inr ? deltaHtml(k.freight_per_delivered_case_inr, p.freight_per_delivered_case_inr, { unit: "", digits: 0, higherIsBetter: false }) : "",
+      m: k.freight_inr ? `${money(k.freight_inr)} billed by carriers this period. Company-wide only - invoices carry no region.` : "Run etl/fetch_freight.py to load carrier invoices." },
+    { key: "open", l: "Open orders", v: fmt(k.open_orders, 0),
+      d: deltaHtml(k.open_orders, p.open_orders, { digits: 0, higherIsBetter: false }),
+      m: `${money(k.open_orders_value_inr)} booked but not yet delivered. Not counted in service figures.` },
   ];
-  $("tiles").innerHTML = tiles.map(t =>
-    `<div class="tile"><div class="lbl">${t.l}</div><div class="val">${t.v}</div><div class="sub">${t.s}</div></div>`).join("");
+  $("tiles").innerHTML = tiles.map(t => {
+    const s = T[t.key] ? st(t.key) : { level: "none" };
+    return `<div class="tile ${s.level}"><div class="lbl">${esc(t.l)}</div><div class="val">${t.v}</div>
+      <div class="row">${T[t.key] ? status(t.key) : ""}${t.d}</div><div class="meaning">${t.m}</div></div>`;
+  }).join("");
 }
 
+/* ---------- panels ---------- */
 async function loadService() {
-  const q = `quarter=${encodeURIComponent(state.quarter)}&region_id=${state.region_id}&uom=${state.uom}`;
-  const d = await api(`/api/service?${q}`);
-  $("h-outlets").textContent = `Lowest fill-rate outlets (${state.uom} basis)`;
-  table("t-outlets", d.worst_outlets); table("t-routes", d.worst_routes);
-  table("t-wh", d.warehouses); table("t-regions", d.regions);
+  const d = await api(`/api/service?${qs()}`);
+  const fillCol = "fill_pct";
+  const top5 = d.worst_outlets.map(({ ordered_each, ordered_case, ...r }) => r);   // volume filter is in the caption
+  table("t-outlets", top5, { rank: true, bars: { [fillCol]: 100 } });
+  table("t-outlets10", d.worst_outlets_10, { rank: true, bars: { [fillCol]: 100 } });
+  const routes = d.worst_routes.map(({ route_name, ...r }) => r);      // route_name repeats the code
+  table("t-routes", routes, { rank: true, bars: { otif_pct: 100 } });
+  table("t-late", d.late_routes, { rank: true, bars: { pct_late_over_2h: 100 }, empty: "No route is more than two hours late on over 10% of its deliveries in this selection." });
+  table("t-wh", d.warehouses, { bars: { [fillCol]: 100 } });
+  table("t-regions", d.regions, { bars: { [fillCol]: 100 } });
   lineChart("c-trend", d.trend, "month_label",
-    [{key:"fill_pct",name:"Fill rate",color:C1},{key:"otif_pct",name:"OTIF",color:C2}], {unit:"%"});
+    [{ key: "fill_pct", name: "Fill rate", color: C.s1 }, { key: "otif_pct", name: "OTIF", color: C.s2 }], { unit: "%" });
 }
 
 async function loadCold() {
-  const q = `quarter=${encodeURIComponent(state.quarter)}&region_id=${state.region_id}`;
-  const d = await api(`/api/coldchain?${q}`);
-  $("v-amb").textContent = fmt(d.ambient_share*100,0)+"%";
+  const d = await api(`/api/coldchain?quarter=${encodeURIComponent(state.quarter)}&region_id=${state.region_id}`);
+  $("v-amb").textContent = pct(d.ambient_share * 100, 0);
   lineChart("c-exc", d.excursion_trend, "month_label",
-    [{key:"excursions_per_100_chilled",name:"per 100 chilled",color:C1}], {zero:true});
-  table("t-expiry", d.near_expiry); table("t-coldret", d.cold_returns);
+    [{ key: "excursions_per_100_chilled", name: "per 100 chilled deliveries", color: C.s1 }], { zero: true });
+  table("t-expiry", d.near_expiry, { bars: { at_risk_lakh: Math.max(...d.near_expiry.map(r => r.at_risk_lakh), 1) }, max: 15 });
+  table("t-coldret", d.cold_returns);
 }
 
 async function loadMoney() {
-  const q = `quarter=${encodeURIComponent(state.quarter)}&region_id=${state.region_id}`;
-  const d = await api(`/api/money?${q}`);
+  const d = await api(`/api/money?quarter=${encodeURIComponent(state.quarter)}&region_id=${state.region_id}`);
   barChart("c-retcat", d.returns_by_category, "category", "returns_lakh");
-  table("t-retcat", d.returns_by_category); table("t-retreason", d.returns_by_reason);
+  table("t-retreason", d.returns_by_reason, { bars: { returns_lakh: Math.max(...d.returns_by_reason.map(r => r.returns_lakh), 1) } });
+  $("v-disc").textContent = money(d.discontinued_total_lakh * 1e5);
+  $("v-disc-sub").textContent = d.discontinued_skus
+    ? `${fmt(d.discontinued_lines, 0)} order lines across ${d.discontinued_skus} discontinued products, ${quarterRange(state.quarter)}. Top ten below.`
+    : "No orders on discontinued products in this period.";
   table("t-disc", d.discontinued);
-  table("t-frwh", d.freight_by_warehouse); table("t-frcar", d.freight_by_carrier);
+  table("t-frwh", d.freight_by_warehouse, { bars: { freight_per_case_inr: Math.max(...d.freight_by_warehouse.map(r => r.freight_per_case_inr), 1) }, empty: "Run etl/fetch_freight.py to load carrier invoices." });
+  table("t-frcar", d.freight_by_carrier, { empty: "Run etl/fetch_freight.py to load carrier invoices." });
 }
 
 async function loadPrice(city) {
-  const d = await api(`/api/price${city?`?city=${encodeURIComponent(city)}`:""}`);
-  if (!d.available) { $("t-gap").innerHTML = '<div class="muted">Run etl/scrape_bazaarpulse.py first.</div>'; return; }
-  const cats = [...new Set(d.gap.map(r=>r.category))].sort();
-  const cities = d.cities;
-  const lut = {}; d.gap.forEach(r => lut[r.category+"|"+r.city] = r.avg_gap_vs_mrp_pct);
-  let h = "<table class='hm'><thead><tr><th>category</th>" +
-          cities.map(c=>`<th class="num">${c}</th>`).join("") + "</tr></thead><tbody>";
+  const d = await api(`/api/price${city ? `?city=${encodeURIComponent(city)}` : ""}`);
+  if (!d.available) { $("t-gap").innerHTML = '<div class="empty">Run etl/scrape_bazaarpulse.py to load competitor prices.</div>'; return; }
+  const cats = [...new Set(d.gap.map(r => r.category))].sort(), cities = d.cities;
+  const lut = {}; d.gap.forEach(r => lut[r.category + "|" + r.city] = r.avg_gap_vs_mrp_pct);
+  let h = "<table class='heat'><thead><tr><th>Category</th>" + cities.map(c => `<th class="num">${esc(c)}</th>`).join("") + "</tr></thead><tbody>";
   for (const cat of cats) {
-    h += `<tr><td style="text-align:left">${cat}</td>` + cities.map(c => {
-      const v = lut[cat+"|"+c];
-      if (v==null) return "<td>–</td>";
-      const a = Math.min(Math.abs(v)/30,1)*0.5;
-      const col = v<0 ? `rgba(235,104,52,${a})` : `rgba(42,120,214,${a})`;
-      return `<td style="background:${col}" title="${cat} · ${c}: ${v>0?"+":""}${v}%">${v>0?"+":""}${fmt(v,1)}%</td>`;
+    h += `<tr><td>${esc(cat)}</td>` + cities.map(c => {
+      const v = lut[cat + "|" + c];
+      if (v == null) return "<td>–</td>";
+      const a = Math.min(Math.abs(v) / 30, 1) * 0.55;                       /* diverging: red below MRP, blue above, grey near zero */
+      const col = Math.abs(v) < 1 ? "#f0efec" : (v < 0 ? `rgba(208,59,59,${a})` : `rgba(42,120,214,${a})`);
+      return `<td style="background:${col}" title="${esc(cat)} · ${esc(c)}: competitors ${v < 0 ? "below" : "above"} our MRP by ${fmt(Math.abs(v), 1)}%">${v > 0 ? "+" : ""}${fmt(v, 1)}%</td>`;
     }).join("") + "</tr>";
   }
   $("t-gap").innerHTML = h + "</tbody></table>";
-  $("n-price").textContent = `Orange = competitors sell below our MRP; blue = above. ${d.matched} listings matched to SKUs, ${d.unmatched} unmatched (listed under Data health).`;
+  $("n-price").textContent = `${fmt(d.matched, 0)} competitor listings matched to our products (${fmt(d.fuzzy, 0)} by a fuzzy match), ${fmt(d.unmatched, 0)} unmatched - see Data health.`;
   const sel = $("city");
-  if (!sel.options.length) { cities.forEach(c => sel.add(new Option(c,c))); }
+  if (!sel.options.length) cities.forEach(c => sel.add(new Option(c, c)));
   sel.value = d.city;
-  $("h-sku").textContent = `Top 20 SKUs by sales — our MRP vs lowest observed price in ${d.city}`;
-  table("t-sku", d.top_skus);
+  $("h-sku").textContent = `Our 20 biggest-selling products - MRP vs the lowest competitor price in ${d.city}`;
+  table("t-sku", d.top_skus, { flag: { col: "gap_pct", test: v => v != null && v <= -15, text: "undercut 15%+", level: "critical" } });
 }
 
 async function loadHealth() {
   const d = await api("/api/health-data");
-  table("t-excl", d.exclusions); table("t-build", d.build);
-  table("t-unmatched", d.unmatched_listings);
+  table("t-excl", d.exclusions);
+  if (d.build.length) {
+    const b = d.build[0];
+    $("t-build").previousElementSibling.textContent = `Built ${b.built_at} UTC from ${b.source_db}`;
+    table("t-build", d.build.map(({ table_name, rows }) => ({ table_name, rows })));
+  }
+  table("t-unmatched", d.unmatched_listings, { empty: "Every competitor listing was matched to a product." });
   const md = await (await fetch("/api/findings")).text();
-  $("t-findings").innerHTML = "<h3>FINDINGS.md</h3>" + md
-    .replace(/&/g,"&amp;").replace(/</g,"&lt;")
-    .replace(/^## (.*)$/gm,"<h2>$1</h2>")
-    .replace(/^# (.*)$/gm,"<h2>$1</h2>")
-    .replace(/^> (.*)$/gm,"<blockquote>$1</blockquote>")
-    .replace(/\*\*(.+?)\*\*/g,"<b>$1</b>")
-    .replace(/`([^`]+)`/g,"<code>$1</code>")
-    .replace(/\n\n/g,"<br><br>");
-}
-
-/* ---------- ask anything ---------- */
-function addMsg(cls, html) {
-  const div = document.createElement("div");
-  div.className = "msg "+cls; div.innerHTML = html;
-  $("chat-log").appendChild(div); div.scrollIntoView({block:"end"});
-  return div;
-}
-function rowsToTable(rows) {
-  const d = document.createElement("div"); table(d, rows); return d.innerHTML;
-}
-async function askQuestion() {
-  const q = $("ask-input").value.trim();
-  if (!q) return;
-  $("ask-input").value = ""; $("ask-btn").disabled = true;
-  addMsg("user", q.replace(/</g,"&lt;"));
-  const wait = addMsg("bot", '<span class="spin"></span> writing and running SQL…');
-  try {
-    const r = await api("/api/ask", {method:"POST",
-      headers:{"Content-Type":"application/json"}, body:JSON.stringify({question:q})});
-    if (r.error) { wait.innerHTML = `<b>⚠</b> ${r.message||r.error}`; }
-    else {
-      wait.innerHTML = `${(r.answer||"").replace(/</g,"&lt;").replace(/\n/g,"<br>")}
-        <pre>${r.sql.replace(/</g,"&lt;")}</pre>` + (r.rows ? rowsToTable(r.rows) : "");
-    }
-  } catch (e) { wait.innerHTML = "<b>⚠</b> request failed: "+e; }
-  $("ask-btn").disabled = false;
+  $("t-findings").innerHTML = "<h3>Verified data findings (FINDINGS.md)</h3>" + esc(md)
+    .replace(/^## (.*)$/gm, "<h2>$1</h2>").replace(/^# (.*)$/gm, "<h2>$1</h2>")
+    .replace(/^&gt; (.*)$/gm, "<blockquote>$1</blockquote>")
+    .replace(/\*\*(.+?)\*\*/g, "<b>$1</b>").replace(/`([^`]+)`/g, "<code>$1</code>")
+    .replace(/\n\n/g, "<br><br>");
 }
 
 /* ---------- boot ---------- */
-async function refresh() {
-  loadKpis(); loadService(); loadCold(); loadMoney(); loadPrice($("city").value || undefined);
+function updatePeriod() {
+  const region = state.region_id ? $("region").selectedOptions[0].text : "all regions";
+  $("period").innerHTML = `Showing <b>${esc(quarterRange(state.quarter))}</b> (${esc(state.quarter)}) · <b>${esc(region)}</b>`;
 }
-(async function boot(){
-  const m = await api("/api/meta");
-  m.quarters.forEach(q => $("quarter").add(new Option(q,q)));
+async function refresh() {
+  updatePeriod();
+  busy(["tiles", "t-outlets", "t-routes", "c-trend", "t-regions", "c-exc", "c-retcat"], true);
+  await Promise.all([loadKpis(), loadService(), loadCold(), loadMoney(), loadPrice($("city").value || undefined)]);
+  busy(["tiles", "t-outlets", "t-routes", "c-trend", "t-regions", "c-exc", "c-retcat"], false);
+}
+function showTab(name) {
+  if (!$("p-" + name)) name = "overview";
+  document.querySelectorAll("nav.tabs button").forEach(x => x.classList.toggle("on", x.dataset.p === name));
+  document.querySelectorAll(".panel").forEach(p => p.classList.remove("on"));
+  $("p-" + name).classList.add("on");
+  if (name === "health" && !$("t-excl").innerHTML) loadHealth();
+  history.replaceState(null, "", "#" + name);            /* deep-linkable: /#money */
+  window.scrollTo({ top: 0 });
+}
+(async function boot() {
+  const m = state.meta = await api("/api/meta");
+  m.quarters.forEach(q => $("quarter").add(new Option(`${q} · ${quarterRange(q)}`, q)));
   state.quarter = m.quarters.includes(m.default_quarter) ? m.default_quarter : m.quarters.at(-1);
   $("quarter").value = state.quarter;
-  $("region").add(new Option("All regions",""));
+  $("region").add(new Option("All regions", ""));
   m.regions.forEach(r => $("region").add(new Option(r.region_name, r.region_id)));
-  $("subtitle").textContent =
-    `on-time ≤ ${m.on_time_grace_min} min · in-full ≥ ${Math.round(m.in_full_threshold*100)}% of ordered units · FY runs Apr–Mar`;
-  if (!m.has_chat) { const b = $("ask-banner"); b.style.display = "block";
-    b.innerHTML = "<b>Chat needs an API key.</b> Put <code>ANTHROPIC_API_KEY=sk-ant-…</code> in " +
-      "<code>control_tower/.env</code> and restart the server. Pre-wired questions below work without one."; }
-  const cq = await api("/api/canned");
-  cq.questions.forEach(q => $("canned").add(new Option(q,q)));
   $("quarter").onchange = e => { state.quarter = e.target.value; refresh(); };
   $("region").onchange = e => { state.region_id = e.target.value; refresh(); };
+  const setUom = u => { state.uom = u;
+    $("uom-each").classList.toggle("on", u === "each"); $("uom-case").classList.toggle("on", u === "case");
+    loadKpis(); loadService(); };
   $("uom-each").onclick = () => setUom("each"); $("uom-case").onclick = () => setUom("case");
-  function setUom(u){ state.uom=u;
-    $("uom-each").classList.toggle("on",u==="each"); $("uom-case").classList.toggle("on",u==="case");
-    loadKpis(); loadService(); }
-  $("tabs").addEventListener("click", ev => {
-    const b = ev.target.closest("button"); if (!b) return;
-    document.querySelectorAll("nav.tabs button").forEach(x=>x.classList.toggle("on",x===b));
-    document.querySelectorAll(".panel").forEach(p=>p.classList.remove("on"));
-    $("p-"+b.dataset.p).classList.add("on");
-    if (b.dataset.p==="health" && !$("t-excl").innerHTML) loadHealth();
-  });
+  $("tabs").addEventListener("click", ev => { const b = ev.target.closest("button"); if (b) showTab(b.dataset.p); });
+  document.querySelectorAll("[data-goto]").forEach(a => a.onclick = ev => { ev.preventDefault(); showTab(a.dataset.goto); });
   $("city").onchange = e => loadPrice(e.target.value);
-  $("ask-btn").onclick = askQuestion;
-  $("ask-input").addEventListener("keydown", e => { if (e.key==="Enter") askQuestion(); });
-  $("canned-btn").onclick = async () => {
-    const r = await api("/api/canned",{method:"POST",headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({name:$("canned").value})});
-    $("canned-out").innerHTML = rowsToTable(r.rows);
-  };
+  if (location.hash.length > 1) showTab(location.hash.slice(1));
   refresh();
 })();
 </script>

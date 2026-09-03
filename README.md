@@ -21,7 +21,8 @@ pip install -r requirements.txt
 
 python profile.py     # regenerates FINDINGS.md from the raw DB   (~15 s)
 python build.py       # builds the semantic layer analytics.sqlite (~15 s)
-python server.py      # control tower -> http://localhost:8500
+python server.py      # dashboard -> http://localhost:8500
+                      # Ask AI    -> http://localhost:8500/ask
 ```
 
 The UI is dependency-free HTML/CSS/JS served by FastAPI - no frontend build,
@@ -44,17 +45,24 @@ Both are resumable and cache to `cache/`; re-running `build.py` re-materialises
 their tables from cache without touching the network. Nothing here mutates the
 ops database — it is opened read-only everywhere.
 
-### Ask-anything (optional API key)
+### Ask AI (optional API key)
 
-The chat tab generates SQL with Claude. Put `ANTHROPIC_API_KEY=sk-ant-...` in
-`control_tower/.env` (gitignored; plain KEY=VALUE lines) or export it, then
-restart the server. Without a key the tab still works through pre-wired
+`/ask` is a full-page chat. Each question becomes one SQL query against the
+cleaned layer; the query runs; the answer is written from the rows that came
+back. Every answer shows **what was measured** (one plain-English line), the
+rows, and the SQL - and the model declines questions the tables cannot answer
+(forecasts, NPS, weather) instead of guessing. Put `ANTHROPIC_API_KEY=sk-ant-...`
+in `control_tower/.env` (gitignored; plain KEY=VALUE lines) or export it, then
+restart the server. Without a key the page still works through pre-wired
 questions; nothing else in the app needs the network.
 
 ### Verify without the UI
 
 ```bash
 python smoke_test.py  # answers the brief's eight illustrative questions in the terminal
+python eval_chat.py   # regression-tests the chat: 12 questions (the brief's eight, a
+                      # known-bad one, three adversarial) checked against metrics.py.
+                      # Needs the API key; ~20 calls.
 ```
 
 ## Layout
@@ -64,9 +72,12 @@ python smoke_test.py  # answers the brief's eight illustrative questions in the 
 | `profile.py` | Recomputes every claim in `FINDINGS.md` from the raw DB |
 | `build.py` | Raw SQLite → cleaned semantic layer (`analytics.sqlite`), rebuilt from scratch each run |
 | `metrics.py` | **Every KPI defined exactly once.** Dashboard, smoke test and chat all read from here |
-| `server.py` | FastAPI backend: JSON endpoints over metrics.py + the ask endpoint |
-| `web/index.html` | The dashboard UI - hand-built HTML/CSS/JS + SVG charts, zero frontend dependencies |
-| `asksql.py` | NL → SQL over the semantic layer; SELECT-only, read-only connection, SQL always shown |
+| `server.py` | FastAPI backend: JSON endpoints over metrics.py + the ask endpoint; serves `/` and `/ask` |
+| `web/index.html` | The dashboard - plain-English tiles with targets, worst performers first, six tabs |
+| `web/ask.html` | The Ask AI page - chat UI with "measured as", data and SQL under every answer |
+| `web/app.css`, `web/common.js` | Shared styles and helpers (tables, SVG charts, formatting); zero frontend dependencies |
+| `asksql.py` | NL → SQL over the semantic layer; the dashboard's definitions are in the prompt as reference queries; SELECT-only, read-only connection |
+| `eval_chat.py` | Chat regression eval: generated SQL checked against metrics.py at run time |
 | `etl/fetch_freight.py` | Partner API walk: 429/503 retries, cursor checkpointing, paise→INR |
 | `etl/scrape_bazaarpulse.py` | Robots-respecting scraper: four per-city price markups, two pagination schemes, SKU matcher |
 | `smoke_test.py` | The brief's 8 questions, answered from the CLI |

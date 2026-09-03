@@ -57,6 +57,15 @@ def quarters(con) -> list[str]:
         "select fy_quarter from fct_order group by fy_quarter order by min(order_date)")]
 
 
+def previous_quarter(con, quarter: str | None) -> str | None:
+    """The fiscal quarter before `quarter` in the data, for period-on-period deltas."""
+    if not quarter:
+        return None
+    qs = quarters(con)
+    i = qs.index(quarter) if quarter in qs else -1
+    return qs[i - 1] if i > 0 else None
+
+
 def regions(con) -> pd.DataFrame:
     return df(con, "select region_id, region_name from dim_region order by region_name")
 
@@ -156,6 +165,21 @@ def worst_routes(con, quarter=None, region_id=None, n=5) -> pd.DataFrame:
         where 1=1 {w}
         group by 1,2,3 having count(*) >= 10
         order by otif_pct asc limit {n}""", p)
+
+
+def late_routes(con, quarter=None, region_id=None, late_min=120, min_share_pct=10, n=10) -> pd.DataFrame:
+    """Brief Q5: routes late by more than `late_min` minutes on more than
+    `min_share_pct` of their deliveries."""
+    w, p = _filters(quarter, region_id, "d")
+    return df(con, f"""
+        select r.route_code, w.warehouse_name, count(*) as deliveries,
+               sum(d.delay_minutes > {late_min}) as late_over_2h,
+               round(sum(d.delay_minutes > {late_min})*100.0/count(*),1) as pct_late_over_2h
+        from fct_delivery d join dim_route r using(route_id)
+        join dim_warehouse w on w.warehouse_id = d.warehouse_id
+        where 1=1 {w}
+        group by 1,2 having count(*) >= 10 and pct_late_over_2h > {min_share_pct}
+        order by pct_late_over_2h desc limit {n}""", p)
 
 
 def worst_warehouses(con, quarter=None, region_id=None, uom="each", n=8) -> pd.DataFrame:

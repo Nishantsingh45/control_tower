@@ -1,0 +1,194 @@
+/* Kestrel Control Tower - shared styles (dashboard + Ask AI page).
+   Committed light design; every surface painted explicitly.
+   Series colours are validated categorical slots (blue / orange / aqua);
+   status colours are reserved for state and always ship with an icon + label. */
+:root{
+  --bg:#f3f5f8; --card:#ffffff; --line:#e3e7ee; --line2:#eef1f5;
+  --ink:#16212e; --ink2:#5b6675; --ink3:#8b93a1;
+  --navy:#12263f; --navy2:#1d3a5f; --navy3:#33517a;
+  --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a;
+  --s1-soft:#e9f1fc;
+  --good:#0ca30c; --warn:#fab219; --critical:#d03b3b;
+  --good-bg:#e9f7e9; --warn-bg:#fff4d6; --critical-bg:#fbe8e8;
+  --radius:12px;
+  --shadow:0 1px 2px rgba(22,33,46,.05),0 1px 6px rgba(22,33,46,.04);
+  --font:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+  --mono:ui-monospace,Consolas,"SF Mono",Menlo,monospace;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 var(--font)}
+a{color:var(--s1)}
+select,button,input,textarea{font:inherit}
+button{cursor:pointer}
+button:disabled{opacity:.5;cursor:default}
+.muted{color:var(--ink3)}
+.small{font-size:12px}
+.hidden{display:none!important}
+
+/* ---------- top bar ---------- */
+.topbar{background:var(--navy);color:#fff;padding:0 24px;height:58px;display:flex;
+        align-items:center;gap:18px;position:sticky;top:0;z-index:10}
+.brand{display:flex;align-items:center;gap:12px;text-decoration:none;color:#fff}
+.brand .logo{width:34px;height:34px;border-radius:9px;background:var(--s1);display:grid;
+             place-items:center;font-weight:700;font-size:16px;letter-spacing:.5px}
+.brand h1{font-size:16px;margin:0;font-weight:650;line-height:1.15}
+.brand .sub{color:#9fb3c8;font-size:12px}
+.topbar .spacer{flex:1}
+.topbar .link{color:#cdd9e8;text-decoration:none;font-size:13px;padding:6px 10px;border-radius:8px}
+.topbar .link:hover{background:rgba(255,255,255,.08);color:#fff}
+.btn{display:inline-flex;align-items:center;gap:8px;background:var(--s1);color:#fff;border:0;
+     border-radius:9px;padding:9px 16px;font-weight:600;text-decoration:none;white-space:nowrap}
+.btn:hover{filter:brightness(1.06)}
+.btn.ghost{background:transparent;border:1px solid var(--navy3);color:#dbe6f3}
+.btn.ghost:hover{background:rgba(255,255,255,.06)}
+.btn.light{background:var(--card);color:var(--ink);border:1px solid var(--line)}
+.btn.light:hover{background:var(--line2);filter:none}
+
+/* ---------- filter row (one row above everything it scopes) ---------- */
+.filters{background:var(--card);border-bottom:1px solid var(--line);padding:10px 24px;
+         display:flex;align-items:center;gap:22px;flex-wrap:wrap}
+.filters label{display:flex;align-items:center;gap:8px;color:var(--ink2);font-size:13px}
+.filters select{background:#fff;color:var(--ink);border:1px solid var(--line);border-radius:8px;
+                padding:6px 10px;min-width:150px}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:#fff}
+.seg button{background:#fff;color:var(--ink2);border:0;padding:6px 14px}
+.seg button.on{background:var(--navy2);color:#fff}
+.help{display:inline-grid;place-items:center;width:18px;height:18px;border-radius:50%;
+      background:var(--line2);color:var(--ink2);font-size:11px;font-weight:700;cursor:help}
+.period{margin-left:auto;color:var(--ink2);font-size:13px}
+.period b{color:var(--ink)}
+
+/* ---------- tabs ---------- */
+nav.tabs{display:flex;gap:4px;padding:8px 24px 0;background:var(--card);border-bottom:1px solid var(--line);
+         overflow-x:auto}
+nav.tabs button{background:none;border:0;padding:10px 14px;color:var(--ink2);font-weight:600;
+                border-bottom:2.5px solid transparent;margin-bottom:-1px;white-space:nowrap}
+nav.tabs button:hover{color:var(--ink)}
+nav.tabs button.on{color:var(--s1);border-color:var(--s1)}
+
+main{max-width:1280px;margin:0 auto;padding:20px 24px 70px}
+.panel{display:none}.panel.on{display:block}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+@media(max-width:980px){.grid2,.grid3{grid-template-columns:1fr}}
+
+/* ---------- section intro ---------- */
+.intro{margin:2px 0 14px}
+.intro h2{font-size:18px;margin:0 0 2px;font-weight:650}
+.intro p{margin:0;color:var(--ink2)}
+
+/* ---------- cards ---------- */
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
+      padding:16px 18px;box-shadow:var(--shadow);margin-bottom:16px;min-width:0}
+.card h3{margin:0 0 2px;font-size:14.5px;font-weight:650}
+.card .caption{color:var(--ink2);font-size:12.5px;margin:0 0 10px}
+.card .note{color:var(--ink3);font-size:12px;margin-top:10px}
+.card .scroll{overflow-x:auto}
+.card.loading{opacity:.55;transition:opacity .2s}
+
+/* ---------- stat tiles ---------- */
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(172px,1fr));gap:14px;margin-bottom:16px}
+.tile{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
+      padding:14px 16px 12px;box-shadow:var(--shadow);position:relative;overflow:hidden}
+.tile::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--line)}
+.tile.good::before{background:var(--good)}
+.tile.warn::before{background:var(--warn)}
+.tile.critical::before{background:var(--critical)}
+.tile .lbl{color:var(--ink2);font-size:12.5px;font-weight:600}
+.tile .val{font-size:30px;font-weight:650;line-height:1.15;margin:4px 0 2px}
+.tile .row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12px;color:var(--ink2)}
+.tile .meaning{color:var(--ink3);font-size:12px;margin-top:6px;line-height:1.35}
+.delta{font-weight:600;font-variant-numeric:tabular-nums}
+.delta.up{color:#006300}.delta.down{color:var(--critical)}.delta.flat{color:var(--ink3)}
+.status{display:inline-flex;align-items:center;gap:5px;border-radius:999px;padding:1px 8px;
+        font-size:11.5px;font-weight:600}
+.status i{width:8px;height:8px;border-radius:50%;display:inline-block}
+.status.good{background:var(--good-bg);color:#0b5e0b}.status.good i{background:var(--good)}
+.status.warn{background:var(--warn-bg);color:#7a5200}.status.warn i{background:var(--warn)}
+.status.critical{background:var(--critical-bg);color:#8f1f1f}.status.critical i{background:var(--critical)}
+.status.none{background:var(--line2);color:var(--ink2)}.status.none i{background:var(--ink3)}
+
+/* ---------- big number inside a card ---------- */
+.hero{font-size:40px;font-weight:650;line-height:1.1;margin:6px 0 2px}
+.hero-sub{color:var(--ink2);font-size:13px}
+
+/* ---------- tables ---------- */
+table{border-collapse:collapse;width:100%;font-size:13px}
+th{color:var(--ink2);text-align:left;font-weight:600;border-bottom:1.5px solid var(--line);
+   padding:6px 8px;white-space:nowrap;font-size:12px}
+td{border-bottom:1px solid var(--line2);padding:6px 8px;white-space:nowrap;vertical-align:middle}
+tr:last-child td{border-bottom:0}
+tbody tr:hover td{background:#f7f9fc}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+td.rank{color:var(--ink3);width:26px;text-align:right;font-variant-numeric:tabular-nums}
+td.total{font-weight:650;background:#f7f9fc}
+.cellbar{display:inline-flex;align-items:center;gap:8px;justify-content:flex-end;min-width:96px}
+.cellbar .track{width:52px;height:6px;background:var(--line2);border-radius:3px;overflow:hidden}
+.cellbar .fill{height:6px;background:var(--s1);border-radius:0 3px 3px 0}
+.pill{display:inline-block;border-radius:999px;padding:1px 8px;font-size:11px;font-weight:600;
+      background:var(--line2);color:var(--ink2)}
+.pill.critical{background:var(--critical-bg);color:#8f1f1f}
+.pill.warn{background:var(--warn-bg);color:#7a5200}
+.pill.good{background:var(--good-bg);color:#0b5e0b}
+.empty{color:var(--ink3);padding:10px 0}
+
+/* ---------- charts ---------- */
+.legend{display:flex;gap:16px;font-size:12px;color:var(--ink2);margin:2px 0 8px;flex-wrap:wrap}
+.legend .k{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px;vertical-align:-1px}
+svg text{font:11px var(--font);fill:var(--ink3)}
+.tip{position:fixed;pointer-events:none;background:#16212e;color:#fff;border-radius:7px;
+     padding:7px 10px;font-size:12px;display:none;z-index:30;white-space:nowrap;box-shadow:0 4px 14px rgba(0,0,0,.18)}
+.hbar{display:flex;align-items:center;gap:10px;margin:5px 0}
+.hbar .lab{width:130px;color:var(--ink2);font-size:12.5px;text-align:right;white-space:nowrap;
+           overflow:hidden;text-overflow:ellipsis}
+.hbar .track{flex:1;height:18px;position:relative}
+.hbar .fill{height:18px;background:var(--s1);border-radius:0 4px 4px 0}
+.hbar .v{width:64px;font-size:12.5px;font-variant-numeric:tabular-nums;color:var(--ink)}
+.heat td{text-align:right;font-variant-numeric:tabular-nums}
+.heat td:first-child{text-align:left}
+.banner{background:#fff7ed;border:1px solid #fdba74;color:#7c2d12;border-radius:10px;padding:10px 14px;
+        font-size:13px;margin-bottom:14px}
+.banner.info{background:var(--s1-soft);border-color:#bcd4f5;color:#173d6b}
+.md h2{font-size:15px;margin:18px 0 6px}
+.md blockquote{border-left:3px solid var(--s1);margin:6px 0;padding:2px 12px;color:var(--ink2);background:#f8fafc}
+.md code{background:#eef1f5;border-radius:4px;padding:1px 5px;font:12px var(--mono)}
+.spin{display:inline-block;width:14px;height:14px;border:2px solid #cdd9e8;border-top-color:var(--s1);
+      border-radius:50%;animation:sp .8s linear infinite;vertical-align:-2px}
+@keyframes sp{to{transform:rotate(360deg)}}
+
+/* ---------- Ask AI page ---------- */
+.ask-layout{display:grid;grid-template-columns:300px 1fr;gap:0;height:calc(100vh - 58px)}
+@media(max-width:900px){.ask-layout{grid-template-columns:1fr;height:auto}.ask-side{border-right:0;border-bottom:1px solid var(--line)}}
+.ask-side{background:var(--card);border-right:1px solid var(--line);padding:18px 16px;overflow-y:auto}
+.ask-side h3{font-size:12px;letter-spacing:.6px;text-transform:uppercase;color:var(--ink3);margin:14px 0 8px}
+.ask-side h3:first-child{margin-top:0}
+.chip{display:block;width:100%;text-align:left;background:#f7f9fc;border:1px solid var(--line);
+      border-radius:9px;padding:8px 10px;margin:6px 0;color:var(--ink);font-size:13px;line-height:1.35}
+.chip:hover{border-color:var(--s1);background:var(--s1-soft)}
+.chip.canned{border-style:dashed}
+.ask-main{display:flex;flex-direction:column;min-width:0}
+.thread{flex:1;overflow-y:auto;padding:22px 26px;display:flex;flex-direction:column;gap:14px}
+.msg{max-width:900px;border-radius:14px;padding:12px 16px;line-height:1.5}
+.msg.user{background:var(--navy2);color:#fff;align-self:flex-end;border-bottom-right-radius:4px}
+.msg.bot{background:var(--card);border:1px solid var(--line);align-self:flex-start;width:100%;
+         border-bottom-left-radius:4px;box-shadow:var(--shadow)}
+.msg.bot .who{font-size:11.5px;color:var(--ink3);font-weight:600;letter-spacing:.4px;text-transform:uppercase;margin-bottom:6px}
+.msg.bot .answer{font-size:15px;line-height:1.55}
+.msg.bot .measures{margin-top:10px;background:var(--s1-soft);border-left:3px solid var(--s1);
+                   border-radius:6px;padding:7px 10px;font-size:12.5px;color:#173d6b}
+.msg.bot .measures b{font-weight:650}
+.msg.bot .actions{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+.msg.bot .actions button{background:#fff;border:1px solid var(--line);border-radius:8px;padding:5px 10px;
+                         font-size:12.5px;color:var(--ink2)}
+.msg.bot .actions button.on{background:var(--line2);color:var(--ink)}
+.msg.bot .data{margin-top:10px;overflow-x:auto;max-height:360px;overflow-y:auto;border:1px solid var(--line2);border-radius:8px}
+.msg.bot pre{background:#0f1b2a;color:#cfe3fa;border-radius:8px;padding:10px 12px;overflow-x:auto;
+             font:12px/1.5 var(--mono);margin:10px 0 0}
+.msg.bot.error .answer{color:#8f1f1f}
+.composer{border-top:1px solid var(--line);background:var(--card);padding:14px 26px 16px}
+.composer .box{display:flex;gap:10px;align-items:flex-end;max-width:900px}
+.composer textarea{flex:1;resize:none;border:1px solid var(--line);border-radius:12px;padding:11px 14px;
+                   background:#fff;color:var(--ink);min-height:46px;max-height:160px;line-height:1.4}
+.composer textarea:focus{outline:2px solid var(--s1-soft);border-color:var(--s1)}
+.composer .hint{color:var(--ink3);font-size:12px;margin-top:6px}

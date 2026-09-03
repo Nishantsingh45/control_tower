@@ -47,5 +47,16 @@ ON_TIME_GRACE_MIN = 30
 # Fiscal year runs April..March. FY label is the *ending* year: Apr 2026 -> FY27.
 FY_START_MONTH = 4
 
+# Front-page status colouring ("are we OK?" for a non-technical reader).
+# A tile is green at/beyond `good`, amber between `good` and `warn`, red beyond
+# `warn`. These are plausible distributor targets, NOT contractual ones - they
+# are here so a reviewer can see and change them in one place.
+KPI_TARGETS = {
+    "fill_rate_pct":              {"good": 95,  "warn": 90,  "higher_is_better": True},
+    "otif_pct":                   {"good": 70,  "warn": 50,  "higher_is_better": True},
+    "excursions_per_100_chilled": {"good": 1.0, "warn": 3.0, "higher_is_better": False},
+    "returns_pct_of_dispatch":    {"good": 0.5, "warn": 1.0, "higher_is_better": False},
+}
+
 # Ask-anything model (needs ANTHROPIC_API_KEY; the app degrades gracefully without it).
 CHAT_MODEL = os.environ.get("KESTREL_CHAT_MODEL", "claude-opus-5")
