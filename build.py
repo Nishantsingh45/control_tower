@@ -125,6 +125,18 @@ def main() -> None:
          select route_id, route_code, route_name, warehouse_id, region_id,
                 is_reefer, vehicle_type, planned_stops, status
          from src.routes""")
+    # F21/F22: salespeople and promotions are loaded so names, targets and
+    # mechanics resolve in answers. Their defects (reps transacting after exit,
+    # promo codes outside the promo window) are noticed in FINDINGS, not corrected.
+    x("""create table dim_salesperson as
+         select salesperson_id, employee_code, full_name, region_id, designation,
+                date_of_joining, date_of_exit, target_monthly_inr, incentive_band,
+                reports_to, status
+         from src.salespeople""")
+    x("""create table dim_promotion as
+         select promo_id, promo_code, promo_name, mechanic, discount_pct, category_scope,
+                channel_scope, region_scope, start_date, end_date, budget_inr, owner, status
+         from src.promotions""")
     x("""create table dim_product as
          select product_id, sku_code, product_name, brand, category, subcategory,
                 pack_size_value, pack_size_uom, case_pack, is_chilled,

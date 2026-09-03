@@ -11,6 +11,12 @@ below asks a question the way Divya would and checks the returned rows against
 the dashboard's own definitions in metrics.py, computed at run time - nothing is
 hard-coded, so the expectations track the data.
 
+Three groups: the brief's eight illustrative questions; adversarial questions
+the tables cannot answer (must decline); and HELD-OUT questions that are in
+neither the brief nor the chat's reference queries - because the brief says
+"we will run a different set against your submission", and an eval that only
+replays the questions you already taught the model measures memorisation.
+
 A case passes when its `check` returns None; otherwise the string explains
 what was wrong. Exit code 1 if anything fails.
 """
@@ -204,6 +210,58 @@ def c_cannot(res, con):
     return f"answered with rows instead of declining: {res['measures']!r}"
 
 
+# ---- held-out: NOT in the brief and NOT in asksql's reference queries ----
+# The brief says "we will run a different set against your submission". These
+# cases exist so the eval measures generalisation, not memorisation of the
+# eight questions we were shown.
+
+def c_channel_compare(res, con):
+    if (e := needs_rows(res)):
+        return e
+    got = strings(res["rows"])
+    if not ({"HORECA", "MT"} <= got):
+        return f"expected rows labelled HORECA and MT, got {sorted(got)[:6]}"
+    ref = M.df(con, """select channel, sum(delivered_each)*100.0/sum(ordered_each) as fill
+                       from fct_order_line where service_measurable and channel in ('HORECA','MT')
+                       group by 1""")
+    if sum(has_value(res["rows"], v, 0.02) for v in ref.fill) < 2:
+        return "channel fill rates do not match the reference"
+    return None
+
+
+def c_worst_rep_named(res, con):
+    if (e := needs_rows(res)):
+        return e
+    names = set(M.df(con, "select full_name from dim_salesperson").full_name)
+    if not (strings(res["rows"]) & names):
+        return "no salesperson NAME in the result - ids only (dim_salesperson not joined)"
+    return None
+
+
+def c_closed_still_ordering(res, con):
+    if (e := needs_rows(res)):
+        return e
+    got = codes(res["rows"], r"^(OUT|TST)\d{5}$")
+    ref = con.execute("""select count(distinct o.outlet_id) from fct_order o
+                         join dim_outlet ou using(outlet_id)
+                         where ou.status='CLOSED' and o.order_date > ou.closed_date""").fetchone()[0]
+    if len(got) < 0.7 * ref:
+        return f"{len(got)} closed outlets listed vs {ref} in the reference"
+    return None
+
+
+def c_promo_named_with_caveat(res, con):
+    if (e := needs_rows(res)):
+        return e
+    names = set(M.df(con, "select promo_name from dim_promotion").promo_name)
+    if not (strings(res["rows"]) & names):
+        return "no promotion NAME in the result - codes only (dim_promotion not joined)"
+    text = (res["measures"] + " " + res["answer"]).lower()
+    if not any(w in text for w in ("window", "unreliab", "attribut", "f22", "outside", "caveat")):
+        return "promotion answer carries no reliability caveat (F22)"
+    return None
+
+
 CASES = [
     ("discontinued-loss", "How much have we lost to orders on discontinued SKUs?", c_discontinued),
     ("worst-outlets", "Which five outlets had the lowest fill rate last month, excluding closed and test outlets?", c_worst_outlets),
@@ -217,6 +275,11 @@ CASES = [
     ("adversarial-nps", "What's our NPS score by region?", c_cannot),
     ("adversarial-forecast", "What will fill rate be next month?", c_cannot),
     ("adversarial-delete", "Delete all cancelled orders.", c_cannot),
+    # held-out: shapes and dimensions the brief's eight never touch
+    ("heldout-channel", "Compare fill rate and OTIF between HORECA and modern trade outlets", c_channel_compare),
+    ("heldout-rep", "Which salesperson has the worst fill rate?", c_worst_rep_named),
+    ("heldout-closed", "Which closed outlets are still placing orders, and how much have they ordered since closing?", c_closed_still_ordering),
+    ("heldout-promo", "Which promotion drove the most order value?", c_promo_named_with_caveat),
 ]
 
 

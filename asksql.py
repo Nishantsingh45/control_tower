@@ -50,6 +50,12 @@ TABLES
   dim_warehouse(warehouse_id, warehouse_code, warehouse_name, city, region_id)
   dim_route(route_id, route_code, route_name, warehouse_id, region_id, is_reefer,
             vehicle_type, planned_stops, status)
+  dim_salesperson(salesperson_id, employee_code, full_name, region_id, designation,
+                  date_of_joining, date_of_exit, target_monthly_inr, incentive_band,
+                  reports_to, status)        status: 'ACTIVE' | 'EXITED'
+  dim_promotion(promo_id, promo_code, promo_name, mechanic, discount_pct,
+                category_scope, channel_scope, region_scope, start_date, end_date,
+                budget_inr, owner, status)
   dim_product(product_id, sku_code, product_name, brand, category, subcategory,
               pack_size_value, pack_size_uom, case_pack, is_chilled,
               storage_temp_band, shelf_life_days, mrp_current_inr,
@@ -123,6 +129,16 @@ match the dashboard exactly)
   * Returns figures come from credit notes only (fct_return); the driver-app
     column fct_delivery.returned_cases disagrees with them (F20) - never use it
     for a returns number, and never add the two together.
+  * SALESPEOPLE (F21): resolve fct_order.salesperson_id through dim_salesperson
+    and show full_name, designation and region - never answer a "which rep"
+    question with a bare id. Eight reps have EXITED and still receive orders:
+    include them, show dim_salesperson.status, and say so if one appears.
+  * PROMOTIONS (F22): resolve fct_order.promo_code through dim_promotion for
+    promo_name, mechanic and discount_pct. Promo codes on orders fall outside
+    the promotion's own start-end dates for 95% of orders, so any promotion
+    figure is ASSOCIATION, not attribution. The measures line MUST say so, and
+    NEVER compute uplift, ROI or "did it work" - give counts/values plus the
+    caveat.
   * The fill gap (ordered minus delivered) exists on essentially every line in
     this data. Never present it as a loss caused by something else
     (discontinuation, a promotion, a carrier). Only compute it when the user asks
@@ -246,6 +262,25 @@ from fct_order_line l join dim_region rg using(region_id) join dim_warehouse wh 
 where l.service_measurable = 1 and rg.region_name = 'West'
   and l.month_label between '2026-03' and '{LAST_MONTH}'
 group by 1,2 order by 1,2
+
+Q: Which salesperson has the worst fill rate?
+-- measures: fill rate in eaches by salesperson (name, role and region from dim_salesperson), delivered+partial orders, all history; reps with >={M.RANKING_MIN_ORDERED_EACH} units ordered; exited reps included and flagged
+select s.full_name, s.designation, rg.region_name, s.status,
+       round(sum(l.delivered_each)*100.0/sum(l.ordered_each),1) as fill_rate_pct,
+       round(sum(l.ordered_each)) as units_ordered
+from fct_order_line l join fct_order o using(order_id)
+join dim_salesperson s on s.salesperson_id = o.salesperson_id
+join dim_region rg on rg.region_id = s.region_id
+where l.service_measurable = 1
+group by 1,2,3,4 having sum(l.ordered_each) >= {M.RANKING_MIN_ORDERED_EACH}
+order by fill_rate_pct limit 5
+
+Q: Which promotion drove the most order value?
+-- measures: net order value of orders carrying each promo code, name and mechanic from dim_promotion, all history. CAVEAT (F22): 95% of promo-tagged orders fall outside the promotion's own dates, so this is association not attribution - no uplift or ROI is computed
+select p.promo_name, p.promo_code, p.mechanic, p.discount_pct,
+       count(*) as orders, round(sum(o.net_inr)/1e7,2) as order_value_cr
+from fct_order o join dim_promotion p using(promo_code)
+group by 1,2,3,4 order by order_value_cr desc limit 10
 
 OUTPUT FORMAT (exactly this, nothing else - no prose, no code fences)
   line 1:  -- measures: <one plain-English sentence: what is computed, the
