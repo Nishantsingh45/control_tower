@@ -5,7 +5,8 @@ price position, worst performers first, with an ask-anything box that answers
 plain-English questions **and shows the SQL and rows behind every answer**.
 
 Built for the FDE take-home. Read [`DECISIONS.md`](DECISIONS.md) first, then
-[`FINDINGS.md`](FINDINGS.md) — the 17 verified data findings the design rests on.
+[`FINDINGS.md`](FINDINGS.md) — the verified data findings the design rests on,
+every number regenerated from the database by `profile.py`.
 
 ## Cold start
 
@@ -28,26 +29,26 @@ python server.py      # dashboard -> http://localhost:8500
 The UI is dependency-free HTML/CSS/JS served by FastAPI - no frontend build,
 no framework, nothing else to install.
 
-That is the whole V1. Two optional externals feed the remaining tiles:
+That is the whole thing — every tab, including freight and competitor prices.
+The two external fetches that feed those tabs are **already cached in `cache/`
+and committed** (they come from the mock API and static site that ship with
+the pack, not from client data), so a clean checkout opens complete and
+`build.py` re-materialises their tables from the cache without touching the
+network. To fetch fresh instead:
 
 ```bash
-python etl/fetch_freight.py       # walks the partner API once (~3 min), caches,
-                                  # loads fct_freight. Starts the mock server
-                                  # itself if nothing answers on :8088.
-python etl/scrape_bazaarpulse.py  # scrapes the bundled competitor site.
-                                  # ~20 min first run: robots.txt asks for a
-                                  # 1s crawl-delay and we honour it across
-                                  # ~1,200 pages. Cached + resumable after.
+rm -rf cache/
+python etl/fetch_freight.py       # walks the partner API once (~3 min): 429/503
+                                  # retries, cursor checkpointing. Starts the mock
+                                  # server itself if nothing answers on :8088.
+python etl/scrape_bazaarpulse.py  # scrapes the bundled competitor site (~20 min:
+                                  # robots.txt asks for a 1s crawl-delay and we
+                                  # honour it across ~1,200 pages). Resumable.
                                   # Serves the site itself if :8080 is quiet.
-
-python profile.py                 # re-run once fetch_freight.py has cached data,
-                                  # to pick up F18 (disputed-invoice finding) -
-                                  # profile.py only sees what's in cache/ so far.
+python profile.py && python build.py
 ```
 
-Both are resumable and cache to `cache/`; re-running `build.py` re-materialises
-their tables from cache without touching the network. Nothing here mutates the
-ops database — it is opened read-only everywhere.
+Nothing here mutates the ops database — it is opened read-only everywhere.
 
 ### Ask AI (optional API key)
 
@@ -64,9 +65,11 @@ questions; nothing else in the app needs the network.
 
 ```bash
 python smoke_test.py  # answers the brief's eight illustrative questions in the terminal
-python eval_chat.py   # regression-tests the chat: 12 questions (the brief's eight, a
-                      # known-bad one, three adversarial) checked against metrics.py.
-                      # Needs the API key; ~20 calls.
+python eval_chat.py   # regression-tests the chat: 16 questions - the brief's eight,
+                      # the one that was once wrong, three adversarial (must decline),
+                      # and four HELD-OUT questions the brief never listed, because
+                      # the graders say they will use a different set. Each answer is
+                      # checked against metrics.py at run time. Needs the key; ~30 calls.
 ```
 
 ## Layout
@@ -105,4 +108,6 @@ python eval_chat.py   # regression-tests the chat: 12 questions (the brief's eig
   warehouse × month grain because invoices carry no delivery key, and only from
   **confirmed** invoices (PAID/PENDING) — 1 in 5 invoices is DISPUTED and is
   shown as its own figure, never folded into cost (F18).
+* **Returns** — finance credit notes only. The driver app logs returns on
+  almost entirely different orders (F20); it is carried, never summed.
 * Rankings exclude test/closed/deleted outlets; historical totals keep them (F12).

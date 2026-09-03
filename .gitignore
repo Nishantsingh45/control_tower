@@ -1,6 +1,5 @@
 __pycache__/
 *.pyc
 analytics.sqlite
-cache/
 .env
 .streamlit/secrets.toml
