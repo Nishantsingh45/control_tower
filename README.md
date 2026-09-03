@@ -21,8 +21,11 @@ pip install -r requirements.txt
 
 python profile.py     # regenerates FINDINGS.md from the raw DB   (~15 s)
 python build.py       # builds the semantic layer analytics.sqlite (~15 s)
-streamlit run app.py  # opens the control tower
+python server.py      # control tower -> http://localhost:8500
 ```
+
+The UI is dependency-free HTML/CSS/JS served by FastAPI - no frontend build,
+no framework, nothing else to install.
 
 That is the whole V1. Two optional externals feed the remaining tiles:
 
@@ -43,9 +46,10 @@ ops database — it is opened read-only everywhere.
 
 ### Ask-anything (optional API key)
 
-The chat tab generates SQL with Claude. Set `ANTHROPIC_API_KEY` in the
-environment before `streamlit run`. Without a key the tab still works through
-pre-wired questions; nothing else in the app needs the network.
+The chat tab generates SQL with Claude. Put `ANTHROPIC_API_KEY=sk-ant-...` in
+`control_tower/.env` (gitignored; plain KEY=VALUE lines) or export it, then
+restart the server. Without a key the tab still works through pre-wired
+questions; nothing else in the app needs the network.
 
 ### Verify without the UI
 
@@ -60,8 +64,9 @@ python smoke_test.py  # answers the brief's eight illustrative questions in the 
 | `profile.py` | Recomputes every claim in `FINDINGS.md` from the raw DB |
 | `build.py` | Raw SQLite → cleaned semantic layer (`analytics.sqlite`), rebuilt from scratch each run |
 | `metrics.py` | **Every KPI defined exactly once.** Dashboard, smoke test and chat all read from here |
-| `app.py` | Streamlit dashboard: headline KPIs, worst performers, region filter, tabs |
-| `chat.py` | NL → SQL over the semantic layer; SELECT-only, read-only connection, SQL always shown |
+| `server.py` | FastAPI backend: JSON endpoints over metrics.py + the ask endpoint |
+| `web/index.html` | The dashboard UI - hand-built HTML/CSS/JS + SVG charts, zero frontend dependencies |
+| `asksql.py` | NL → SQL over the semantic layer; SELECT-only, read-only connection, SQL always shown |
 | `etl/fetch_freight.py` | Partner API walk: 429/503 retries, cursor checkpointing, paise→INR |
 | `etl/scrape_bazaarpulse.py` | Robots-respecting scraper: four per-city price markups, two pagination schemes, SKU matcher |
 | `smoke_test.py` | The brief's 8 questions, answered from the CLI |

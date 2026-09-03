@@ -1,19 +1,21 @@
-"""Ask-anything: natural language -> SQL over the semantic layer.
+"""Ask-anything core: natural language -> SQL over the semantic layer.
 
 Design constraints, in order of importance:
-  1. Answers must carry their numbers: every reply shows the generated SQL and
-     the rows it returned, so Divya gets "an answer with the numbers behind it".
+  1. Answers must carry their numbers: every reply returns the generated SQL
+     and the rows behind it, so Divya gets "an answer with the numbers".
   2. The model only ever sees the CLEANED semantic layer (same tables as the
      dashboard), so chat and charts cannot disagree.
   3. Safety: the connection is opened read-only at the SQLite level, and the
      generated statement must be a single SELECT/WITH. Defence in depth - the
      read-only mode is the real guarantee.
-  4. No API key -> the tab still works, falling back to pre-wired questions.
+  4. No API key -> the caller gets a clean "no_key" signal and falls back to
+     pre-wired questions.
+
+Pure logic - no UI imports. server.py exposes it over HTTP.
 """
 import re
 
 import pandas as pd
-import streamlit as st
 
 import metrics as M
 from config import CHAT_MODEL, IN_FULL_THRESHOLD, ON_TIME_GRACE_MIN
@@ -117,11 +119,14 @@ CANNED = {
 }
 
 
-def _get_client():
+def get_client():
+    """Anthropic client, or None when no credential resolves (the UI then
+    offers pre-wired questions and explains how to set the key)."""
     try:
         import anthropic
         client = anthropic.Anthropic()   # resolves key from environment/profile
-        return client
+        client._has_key = bool(client.api_key or client.auth_token)
+        return client if client._has_key else None
     except Exception:
         return None
 
@@ -142,7 +147,7 @@ def _guard(sql: str) -> str | None:
     return None
 
 
-def _run(con, sql: str) -> pd.DataFrame:
+def run_sql(con, sql: str) -> pd.DataFrame:
     cur = con.execute(sql)
     cols = [d[0] for d in cur.description]
     return pd.DataFrame(cur.fetchmany(MAX_ROWS), columns=cols)
@@ -150,8 +155,6 @@ def _run(con, sql: str) -> pd.DataFrame:
 
 def ask(client, con, question: str) -> tuple[str, pd.DataFrame | None, str]:
     """Returns (sql, dataframe, answer_text). Retries once on SQL error."""
-    import anthropic
-
     msgs = [{"role": "user", "content": question}]
     sql, frame, err = "", None, ""
     for _attempt in range(2):
@@ -163,7 +166,7 @@ def ask(client, con, question: str) -> tuple[str, pd.DataFrame | None, str]:
         err = _guard(sql)
         if err is None:
             try:
-                frame = _run(con, sql)
+                frame = run_sql(con, sql)
                 break
             except Exception as e:                    # bad SQL -> one retry with the error
                 err = str(e)
@@ -186,60 +189,3 @@ def ask(client, con, question: str) -> tuple[str, pd.DataFrame | None, str]:
                    f"{frame.head(50).to_csv(index=False)}"}])
     answer = next((b.text for b in resp.content if b.type == "text"), "")
     return sql, frame, answer
-
-
-def render(con) -> None:
-    """The Streamlit 'Ask anything' tab."""
-    client = _get_client()
-
-    if client is None:
-        st.warning("`anthropic` SDK not available - showing pre-wired questions only.")
-    st.caption("Answers are generated as SQL against the same cleaned tables the "
-               "dashboard uses, and every answer shows its SQL and rows.")
-
-    with st.expander("Pre-wired questions (work without an API key)"):
-        pick = st.selectbox("Question", list(CANNED), label_visibility="collapsed")
-        if st.button("Run pre-wired question"):
-            st.dataframe(CANNED[pick](con), hide_index=True, width="stretch")
-
-    if client is None:
-        return
-
-    if "chat_log" not in st.session_state:
-        st.session_state.chat_log = []
-
-    for entry in st.session_state.chat_log:
-        with st.chat_message(entry["role"]):
-            st.markdown(entry["text"])
-            if entry.get("sql"):
-                st.code(entry["sql"], language="sql")
-            if entry.get("frame") is not None:
-                st.dataframe(entry["frame"], hide_index=True, width="stretch")
-
-    q = st.chat_input('e.g. "why did fill rate drop in the West last quarter?"')
-    if q:
-        st.session_state.chat_log.append({"role": "user", "text": q})
-        with st.chat_message("user"):
-            st.markdown(q)
-        with st.chat_message("assistant"):
-            try:
-                import anthropic
-                with st.spinner("Writing and running SQL..."):
-                    sql, frame, answer = ask(client, con, q)
-                st.markdown(answer)
-                st.code(sql, language="sql")
-                if frame is not None:
-                    st.dataframe(frame, hide_index=True, width="stretch")
-                st.session_state.chat_log.append(
-                    {"role": "assistant", "text": answer, "sql": sql, "frame": frame})
-            except anthropic.AuthenticationError:
-                msg = ("No valid Anthropic API key found. Set `ANTHROPIC_API_KEY` "
-                       "and reload - or use the pre-wired questions above.")
-                st.error(msg)
-                st.session_state.chat_log.append({"role": "assistant", "text": msg})
-            except anthropic.RateLimitError:
-                st.error("Rate limited by the API - try again in a few seconds.")
-            except anthropic.APIStatusError as e:
-                st.error(f"API error {e.status_code}: {e.message}")
-            except anthropic.APIConnectionError:
-                st.error("Network error reaching the Anthropic API.")

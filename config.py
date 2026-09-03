@@ -6,6 +6,16 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent
 
+# Load KEY=VALUE pairs from an optional .env file (gitignored) so a reviewer
+# can paste ANTHROPIC_API_KEY once instead of exporting it per shell.
+_env = REPO_ROOT / ".env"
+if _env.exists():
+    for _line in _env.read_text(encoding="utf-8").splitlines():
+        _line = _line.strip()
+        if _line and not _line.startswith("#") and "=" in _line:
+            _k, _v = _line.split("=", 1)
+            os.environ.setdefault(_k.strip(), _v.strip().strip('"').strip("'"))
+
 # The assignment pack ships the SQLite DB one level up from this repo.
 # Override with KESTREL_DB when the reviewer supplies their own copy.
 KESTREL_DB = Path(os.environ.get("KESTREL_DB", REPO_ROOT.parent / "data" / "kestrel_ops.db"))
