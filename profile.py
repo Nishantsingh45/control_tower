@@ -309,7 +309,71 @@ gapless validity windows - so price-as-at-order-date is computed exactly, never 
 from today's price.""",
         f"dupe order numbers: {dupes}; orphan lines: {orphans}; orders with >1 delivery: {multi}")
 
+    # F20 -- two return feeds that do not agree --------------------------
+    d_no_cn, cn_no_d, v_no_d, v_all = one("""select
+        (select count(*) from deliveries d where d.returned_cases>0
+           and not exists (select 1 from returns_credit_notes r where r.order_id=d.order_id)),
+        (select count(*) from returns_credit_notes r join deliveries d using(order_id) where d.returned_cases=0),
+        (select round(sum(r.credit_note_value_inr)/1e7,2) from returns_credit_notes r
+           join deliveries d using(order_id) where d.returned_cases=0),
+        (select round(sum(credit_note_value_inr)/1e7,2) from returns_credit_notes)""")
+    add("F20. The driver app and finance record returns for different orders",
+        f"""Two feeds describe the same event: `deliveries.returned_cases` (driver app) and
+`returns_credit_notes` (finance). They barely overlap: {d_no_cn:,} deliveries log returned cases
+with no credit note on that order, and {cn_no_d:,} credit notes sit on orders whose delivery
+shows zero returns - Rs {v_no_d} crore of the Rs {v_all} crore total. Divya's opening complaint
+("four people send me four numbers") is in the data. Every returns figure in this system comes
+from the credit notes, because that is where the money is; the driver-app column is carried
+into `fct_delivery` but deliberately not used, and this note is why.""",
+        f"deliveries with returns but no credit note: {d_no_cn:,}; credit notes with no driver-logged "
+        f"return: {cn_no_d:,} (Rs {v_no_d}cr of Rs {v_all}cr)")
+
+    # F21 -- order entry validates against no master ------------------------
+    cl_n, cl_v, cl_out, cl_tot = one("""select
+        (select count(*) from orders o join outlets ou using(outlet_id)
+           where ou.status='CLOSED' and o.order_date > ou.closed_date),
+        (select round(sum(o.order_value_gross_inr)/1e7,2) from orders o join outlets ou using(outlet_id)
+           where ou.status='CLOSED' and o.order_date > ou.closed_date),
+        (select count(distinct ou.outlet_id) from orders o join outlets ou using(outlet_id)
+           where ou.status='CLOSED' and o.order_date > ou.closed_date),
+        (select count(*) from outlets where status='CLOSED')""")
+    ex_n, ex_v = one("""select count(*), round(sum(o.order_value_gross_inr)/1e7,2)
+                        from orders o join salespeople s using(salesperson_id)
+                        where s.date_of_exit is not null and o.order_date > s.date_of_exit""")
+    add("F21. Order entry validates against no master: closed outlets and exited reps keep transacting",
+        f"""Discontinued SKUs still sell (F11); the same gap exists for every other master. {cl_n:,}
+orders (Rs {cl_v} crore) are dated after the outlet's `closed_date` - from {cl_out} of {cl_tot} closed
+outlets, tailing off smoothly over the following year rather than clustering at closure, so this is
+not a wrong date. {ex_n:,} orders (Rs {ex_v} crore) are assigned to salespeople after their
+`date_of_exit`. One process finding, three symptoms: nothing at capture checks product, outlet or
+rep status. Noticed, not corrected - closed outlets stay excluded from rankings (F12) and the
+chat can list them; who is really placing these orders needs a client answer.""",
+        f"post-closure orders: {cl_n:,} / Rs {cl_v}cr from {cl_out}/{cl_tot} closed outlets; "
+        f"post-exit rep orders: {ex_n:,} / Rs {ex_v}cr")
+
+    # F22 -- promo codes do not respect the promotion master -------------
+    p_all, p_out, p_out_v, p_chan = one("""select
+        (select count(*) from orders where promo_code is not null and promo_code<>''),
+        (select count(*) from orders o join promotions p using(promo_code)
+           where o.order_date < p.start_date or o.order_date > p.end_date),
+        (select round(sum(o.order_value_gross_inr)/1e7,2) from orders o join promotions p using(promo_code)
+           where o.order_date < p.start_date or o.order_date > p.end_date),
+        (select count(*) from orders o join promotions p using(promo_code)
+           where p.channel_scope<>'ALL' and instr(p.channel_scope, o.channel)=0)""")
+    add("F22. Promo codes on orders ignore the promotion's own dates and channel - attribution is unreliable",
+        f"""{p_all:,} orders carry a promo code and every code exists in `promotions`. But
+{p_out:,} of them ({p_out*100//p_all}%, Rs {p_out_v} crore) are dated outside that promotion's
+start-end window, and {p_chan:,} are on a channel the promotion does not cover. Either the code
+is stamped after the fact or the promotion master's dates are wrong; the data cannot say which.
+Consequence: "did promotion X work" cannot be answered honestly from this extract. The
+`dim_promotion` table is loaded so names and mechanics resolve, and the chat is told to attach
+this caveat to any promotion question rather than compute an uplift that would be fiction.""",
+        f"promo-tagged orders: {p_all:,}; outside window: {p_out:,} (Rs {p_out_v}cr); "
+        f"outside channel scope: {p_chan:,}")
+
     # ---- write markdown ---------------------------------------------------
+    # blocks above are in discovery order; the document reads in F-number order
+    findings.sort(key=lambda f: int(re.match(r"F(\d+)", f[0]).group(1)))
     lines_md = [
         "# FINDINGS - Kestrel ops data, verified",
         "",

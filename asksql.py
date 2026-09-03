@@ -117,6 +117,12 @@ match the dashboard exactly)
     AFTER dim_product.discontinued_date (discontinued_date IS NOT NULL). Value =
     SUM(line_value_inr). NEVER count orders placed before the discontinuation
     date - ordering the SKU was legitimate then. Do NOT subtract delivered value.
+  * CLOSED OUTLETS still place orders (F21): "orders from closed outlets" =
+    fct_order joined to dim_outlet WHERE status = 'CLOSED' AND order_date >
+    closed_date. Count and value them; do not exclude them from company totals.
+  * Returns figures come from credit notes only (fct_return); the driver-app
+    column fct_delivery.returned_cases disagrees with them (F20) - never use it
+    for a returns number, and never add the two together.
   * The fill gap (ordered minus delivered) exists on essentially every line in
     this data. Never present it as a loss caused by something else
     (discontinuation, a promotion, a carrier). Only compute it when the user asks

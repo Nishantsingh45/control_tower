@@ -130,16 +130,15 @@ populated: confirmed (0 of 14,000). The build trusts only what was verified.
 
 > **Evidence:** gross-vs-lines exceptions: 0; approval_date populated: 0/14,000
 
-## F16. Chilled product routinely ships on non-reefer vehicles; some excursion flags are noise
+## F14. What is clean (and is relied on)
 
-46,699 deliveries (61%) carry at least one chilled SKU on a NON-reefer
-vehicle, logging 1,443 temperature excursions - triple the reefer fleet's count.
-Meanwhile 3,752 reefer trips carry no chilled product at all, and 391
-excursion flags sit on fully-ambient loads (physically meaningless; excluded from the metric).
-'Chilled delivery' in every metric therefore means carries >=1 chilled SKU, not runs on a
-reefer route. The routing itself is arguably the biggest cold-chain finding in the data.
+Order numbers unique (0 dupes), no orphan lines (0), deliveries map
+1:1 to DELIVERED/PARTIAL orders (0 multi-delivery orders), `case_pack_at_order` agrees
+with the product master on every line, and `product_price_history` covers all 341 SKUs with
+gapless validity windows - so price-as-at-order-date is computed exactly, never approximated
+from today's price.
 
-> **Evidence:** reefer=0 chilled_cargo=0: 391 excursions / 13,189 deliveries; reefer=0 chilled_cargo=1: 1,443 excursions / 46,699 deliveries; reefer=1 chilled_cargo=0: 104 excursions / 3,752 deliveries; reefer=1 chilled_cargo=1: 433 excursions / 13,249 deliveries
+> **Evidence:** dupe order numbers: 0; orphan lines: 0; orders with >1 delivery: 0
 
 ## F15. Credit notes are dated past the stated period end
 
@@ -150,6 +149,17 @@ June-quarter returns metrics note that late credits may still be arriving ('the 
 closed for returns').
 
 > **Evidence:** returns dated after 2026-06-30: 393; latest return_date: 2026-07-29
+
+## F16. Chilled product routinely ships on non-reefer vehicles; some excursion flags are noise
+
+46,699 deliveries (61%) carry at least one chilled SKU on a NON-reefer
+vehicle, logging 1,443 temperature excursions - triple the reefer fleet's count.
+Meanwhile 3,752 reefer trips carry no chilled product at all, and 391
+excursion flags sit on fully-ambient loads (physically meaningless; excluded from the metric).
+'Chilled delivery' in every metric therefore means carries >=1 chilled SKU, not runs on a
+reefer route. The routing itself is arguably the biggest cold-chain finding in the data.
+
+> **Evidence:** reefer=0 chilled_cargo=0: 391 excursions / 13,189 deliveries; reefer=0 chilled_cargo=1: 1,443 excursions / 46,699 deliveries; reefer=1 chilled_cargo=0: 104 excursions / 3,752 deliveries; reefer=1 chilled_cargo=1: 433 excursions / 13,249 deliveries
 
 ## F17. Nine product names exist twice in the master under different SKUs and MRPs
 
@@ -187,12 +197,38 @@ reads as "checked, found nothing" rather than "not looked at".
 
 > **Evidence:** OPEN-order share by credit_hold_flag: {0: 2.0600441170972443, 1: 1.8367346938775513}; returns/order by risk_flag: {'HIGH': 0.164993481095176, 'LOW': 0.1703312585512497, 'MEDIUM': 0.1599951332278866}; on-time% by priority_flag: {0: 60.1681283482299, 1: 61.67531504818384}
 
-## F14. What is clean (and is relied on)
+## F20. The driver app and finance record returns for different orders
 
-Order numbers unique (0 dupes), no orphan lines (0), deliveries map
-1:1 to DELIVERED/PARTIAL orders (0 multi-delivery orders), `case_pack_at_order` agrees
-with the product master on every line, and `product_price_history` covers all 341 SKUs with
-gapless validity windows - so price-as-at-order-date is computed exactly, never approximated
-from today's price.
+Two feeds describe the same event: `deliveries.returned_cases` (driver app) and
+`returns_credit_notes` (finance). They barely overlap: 5,872 deliveries log returned cases
+with no credit note on that order, and 11,625 credit notes sit on orders whose delivery
+shows zero returns - Rs 0.8 crore of the Rs 0.96 crore total. Divya's opening complaint
+("four people send me four numbers") is in the data. Every returns figure in this system comes
+from the credit notes, because that is where the money is; the driver-app column is carried
+into `fct_delivery` but deliberately not used, and this note is why.
 
-> **Evidence:** dupe order numbers: 0; orphan lines: 0; orders with >1 delivery: 0
+> **Evidence:** deliveries with returns but no credit note: 5,872; credit notes with no driver-logged return: 11,625 (Rs 0.8cr of Rs 0.96cr)
+
+## F21. Order entry validates against no master: closed outlets and exited reps keep transacting
+
+Discontinued SKUs still sell (F11); the same gap exists for every other master. 2,493
+orders (Rs 58.36 crore) are dated after the outlet's `closed_date` - from 55 of 55 closed
+outlets, tailing off smoothly over the following year rather than clustering at closure, so this is
+not a wrong date. 2,576 orders (Rs 71.07 crore) are assigned to salespeople after their
+`date_of_exit`. One process finding, three symptoms: nothing at capture checks product, outlet or
+rep status. Noticed, not corrected - closed outlets stay excluded from rankings (F12) and the
+chat can list them; who is really placing these orders needs a client answer.
+
+> **Evidence:** post-closure orders: 2,493 / Rs 58.36cr from 55/55 closed outlets; post-exit rep orders: 2,576 / Rs 71.07cr
+
+## F22. Promo codes on orders ignore the promotion's own dates and channel - attribution is unreliable
+
+20,306 orders carry a promo code and every code exists in `promotions`. But
+19,316 of them (95%, Rs 471.63 crore) are dated outside that promotion's
+start-end window, and 8,267 are on a channel the promotion does not cover. Either the code
+is stamped after the fact or the promotion master's dates are wrong; the data cannot say which.
+Consequence: "did promotion X work" cannot be answered honestly from this extract. The
+`dim_promotion` table is loaded so names and mechanics resolve, and the chat is told to attach
+this caveat to any promotion question rather than compute an uplift that would be fiction.
+
+> **Evidence:** promo-tagged orders: 20,306; outside window: 19,316 (Rs 471.63cr); outside channel scope: 8,267

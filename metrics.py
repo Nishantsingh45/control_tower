@@ -15,6 +15,9 @@ Conventions (defended in FINDINGS.md / DECISIONS.md):
   * Freight cost uses only confirmed invoices (status PAID or PENDING); DISPUTED
     invoices (~1 in 5, by count and value) are excluded from cost and shown
     separately - a contested carrier charge is not a confirmed cost (F18).
+  * Returns come from finance credit notes (fct_return). The driver-app column
+    fct_delivery.returned_cases records returns on different orders (F20) and is
+    carried but never summed - money follows the credit note.
 """
 import sqlite3
 
