@@ -30,7 +30,8 @@ def j(frame: pd.DataFrame) -> list[dict]:
     return json.loads(frame.to_json(orient="records"))
 
 
-def parse_region(region_id: int | None) -> int | None:
+def parse_region(region_id: str | None) -> int | None:
+    """The UI sends region_id as a string, empty for 'All regions'."""
     return int(region_id) if region_id else None
 
 
@@ -56,7 +57,7 @@ def meta():
 
 
 @app.get("/api/kpis")
-def kpis(quarter: str | None = None, region_id: int | None = None, uom: str = "each"):
+def kpis(quarter: str | None = None, region_id: str | None = None, uom: str = "each"):
     con = M.connect()
     k = M.kpi_summary(con, quarter, parse_region(region_id), uom)
     other = M.kpi_summary(con, quarter, parse_region(region_id),
@@ -66,7 +67,7 @@ def kpis(quarter: str | None = None, region_id: int | None = None, uom: str = "e
 
 
 @app.get("/api/service")
-def service(quarter: str | None = None, region_id: int | None = None, uom: str = "each"):
+def service(quarter: str | None = None, region_id: str | None = None, uom: str = "each"):
     con = M.connect()
     r = parse_region(region_id)
     trend = M.monthly_service_trend(con, r, uom)
@@ -80,7 +81,7 @@ def service(quarter: str | None = None, region_id: int | None = None, uom: str =
 
 
 @app.get("/api/coldchain")
-def coldchain(quarter: str | None = None, region_id: int | None = None):
+def coldchain(quarter: str | None = None, region_id: str | None = None):
     con = M.connect()
     r = parse_region(region_id)
     exc = M.excursion_trend(con, r)
@@ -96,7 +97,7 @@ def coldchain(quarter: str | None = None, region_id: int | None = None):
 
 
 @app.get("/api/money")
-def money(quarter: str | None = None, region_id: int | None = None):
+def money(quarter: str | None = None, region_id: str | None = None):
     con = M.connect()
     r = parse_region(region_id)
     out = {
