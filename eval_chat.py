@@ -239,15 +239,29 @@ def c_worst_rep_named(res, con):
 
 
 def c_closed_still_ordering(res, con):
+    """Correctness, not shape. A 'how much' question may legitimately come back
+    as a TOTAL plus the top contributors (the house rules ask for exactly that),
+    so this checks that whatever outlets ARE named are genuinely closed and
+    post-closure, and that the totals reconcile - not that all 55 are listed."""
     if (e := needs_rows(res)):
         return e
+    ref = M.df(con, """select ou.outlet_code, count(*) as orders, sum(o.net_inr) as value_inr
+                       from fct_order o join dim_outlet ou using(outlet_id)
+                       where ou.status='CLOSED' and o.order_date > ou.closed_date
+                       group by 1""")
+    legit = set(ref.outlet_code)
     got = codes(res["rows"], r"^(OUT|TST)\d{5}$")
-    ref = con.execute("""select count(distinct o.outlet_id) from fct_order o
-                         join dim_outlet ou using(outlet_id)
-                         where ou.status='CLOSED' and o.order_date > ou.closed_date""").fetchone()[0]
-    if len(got) < 0.7 * ref:
-        return f"{len(got)} closed outlets listed vs {ref} in the reference"
-    return None
+    if not got:
+        return "no outlet codes in the result"
+    if stray := got - legit:
+        return f"outlets named that are not closed-and-post-closure: {sorted(stray)[:5]}"
+    # either the full list, or a total that reconciles to the reference
+    if len(got) >= 0.7 * len(legit):
+        return None
+    if has_value(res["rows"], float(ref.orders.sum())) or has_value(res["rows"], float(ref.value_inr.sum())):
+        return None
+    return (f"only {len(got)} of {len(legit)} closed outlets listed, and no reconciling total "
+            f"({int(ref.orders.sum())} orders / Rs {ref.value_inr.sum()/1e7:.2f}cr) present")
 
 
 def c_promo_named_with_caveat(res, con):
@@ -284,6 +298,12 @@ CASES = [
 
 
 def main(argv):
+    # Answers contain characters a Windows console's default cp1252 cannot
+    # encode (>=, en-dashes, the rupee sign), which crashed the run mid-suite.
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    except AttributeError:                       # very old interpreters
+        pass
     only = [a.lower() for a in argv]
     cases = [c for c in CASES if not only or any(o in c[0] for o in only)]
     client = asksql.get_client()

@@ -11,7 +11,6 @@
   <a class="brand" href="/"><span class="logo">K</span>
     <div><h1>Ask AI</h1><div class="sub">Plain-English questions, answered from the same numbers as the dashboard</div></div></a>
   <div class="spacer"></div>
-  <span class="link" id="model-badge"></span>
   <button class="btn ghost" id="clear-btn">Clear conversation</button>
   <a class="btn light" href="/">← Dashboard</a>
 </header>
@@ -20,9 +19,9 @@
   <aside class="ask-side">
     <h3>Try asking</h3>
     <div id="suggest"></div>
-    <h3>Pre-wired questions <span class="muted" style="text-transform:none;letter-spacing:0">(no API key needed)</span></h3>
+    <h3>Ready-made questions</h3>
     <div id="canned"></div>
-    <p class="note" style="margin-top:14px">Every answer shows <b>what was measured</b>, the rows behind it, and the SQL that produced them. The AI can only read - never change - the data.</p>
+    <p class="note" style="margin-top:14px">Every answer says <b>what was counted</b> and shows the numbers behind it. Answers come from the same figures as the dashboard, so the two can never disagree.</p>
   </aside>
 
   <section class="ask-main">
@@ -61,24 +60,25 @@ const save = () => { try { sessionStorage.setItem(KEY, JSON.stringify(thread.sli
 
 function welcome() {
   return `<div class="msg bot"><div class="who">Kestrel · Ask AI</div>
-    <div class="answer">Ask me anything about service, cold chain, money or prices. I write a query against the
-    cleaned analytics tables, run it, and answer from the rows that come back - so every figure is real and
-    you can open the data or the SQL under any answer. If the data cannot answer a question, I will say so.</div></div>`;
+    <div class="answer">Ask me anything about service, cold chain, money or prices — in plain English.
+    Every answer tells you exactly what was counted and shows the numbers behind it, using the same
+    figures as the dashboard. If the data can't answer something, I'll say so rather than guess.</div></div>`;
 }
 
+/* The numbers are the point (Divya: "an answer with the numbers behind it"), so
+   a short result is shown outright and only a long one folds away. The query
+   that produced them is not shown - it is engineering, not an answer. */
 function card(res) {
   if (res.error) return `<div class="msg bot error"><div class="who">Kestrel · Ask AI</div><div class="answer">⚠ ${esc(res.message || res.error)}</div></div>`;
   const n = res.rows ? res.rows.length : 0;
   const isCannot = res.status === "cannot", isErr = res.status === "error";
-  let h = `<div class="msg bot${isErr ? " error" : ""}"><div class="who">Kestrel · Ask AI${res.sql === null ? " · pre-wired" : ""}</div>
+  const open = n > 0 && n <= 8;
+  let h = `<div class="msg bot${isErr ? " error" : ""}"><div class="who">Kestrel · Ask AI</div>
     <div class="answer">${mdToHtml(res.answer || "")}</div>`;
-  if (res.measures) h += `<div class="measures"><b>Measured as:</b> ${esc(res.measures)}</div>`;
-  if (!isCannot && (n || res.sql)) {
-    h += `<div class="actions">` +
-      (n ? `<button data-toggle="data">Show data (${n} row${n === 1 ? "" : "s"}${res.truncated ? ", capped" : ""})</button>` : "") +
-      (res.sql ? `<button data-toggle="sql">Show SQL</button>` : "") + `</div>`;
-    if (n) h += `<div class="data hidden">${rowsToTable(res.rows, { total: Object.keys(res.rows[0])[0] })}</div>`;
-    if (res.sql) h += `<pre class="sql hidden">${esc(res.sql)}</pre>`;
+  if (res.measures) h += `<div class="measures"><b>What was counted:</b> ${esc(res.measures)}</div>`;
+  if (!isCannot && n) {
+    if (!open) h += `<div class="actions"><button data-toggle="data">See all ${n} row${n === 1 ? "" : "s"}${res.truncated ? " (capped)" : ""}</button></div>`;
+    h += `<div class="data${open ? "" : " hidden"}">${rowsToTable(res.rows, { total: Object.keys(res.rows[0])[0] })}</div>`;
   }
   return h + `</div>`;
 }
@@ -100,7 +100,7 @@ async function send(q, canned) {
   $("ask-btn").disabled = true;
   const t = $("thread");
   t.insertAdjacentHTML("beforeend", `<div class="msg user">${esc(q)}</div>
-    <div class="msg bot" id="pending"><div class="who">Kestrel · Ask AI</div><div class="answer"><span class="spin"></span> ${canned ? "running the dashboard query…" : "writing and running the query…"}</div></div>`);
+    <div class="msg bot" id="pending"><div class="who">Kestrel · Ask AI</div><div class="answer"><span class="spin"></span> Looking at the numbers…</div></div>`);
   t.scrollTop = t.scrollHeight;
   let res;
   try {
@@ -117,10 +117,9 @@ function autosize() { const ta = $("ask-input"); ta.style.height = "auto"; ta.st
 
 (async function boot() {
   const m = await api("/api/meta");
-  $("model-badge").textContent = m.has_chat ? `model: ${m.chat_model}` : "no API key";
   if (!m.has_chat) {
     const b = $("banner"); b.classList.remove("hidden");
-    b.innerHTML = "<b>Free-text questions need an API key.</b> Put <code>ANTHROPIC_API_KEY=sk-ant-…</code> in <code>control_tower/.env</code> and restart the server. The pre-wired questions on the left work without one.";
+    b.innerHTML = "<b>Open questions are switched off.</b> This needs an API key to be configured — see the README. The ready-made questions on the left work without one.";
   }
   $("suggest").innerHTML = SUGGESTIONS.map(s => `<button class="chip" data-q="${esc(s)}">${esc(s)}</button>`).join("");
   const cq = await api("/api/canned");

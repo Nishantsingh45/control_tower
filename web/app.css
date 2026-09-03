@@ -67,7 +67,8 @@ nav.tabs button{background:none;border:0;padding:10px 14px;color:var(--ink2);fon
 nav.tabs button:hover{color:var(--ink)}
 nav.tabs button.on{color:var(--s1);border-color:var(--s1)}
 
-main{max-width:1280px;margin:0 auto;padding:20px 24px 70px}
+main{max-width:1280px;margin:0 auto;padding:20px 24px 8px}
+footer{max-width:1280px;margin:0 auto;padding:4px 24px 44px;color:var(--ink3);font-size:12px}
 .panel{display:none}.panel.on{display:block}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
 .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}

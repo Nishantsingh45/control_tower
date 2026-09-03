@@ -196,10 +196,11 @@ def canned_run(payload: dict = Body(...)):
     measures, fn = asksql.CANNED[name]
     con = M.connect()
     frame = fn(con)
+    n = len(frame)
     return {"status": "ok", "question": name, "measures": measures,
             "rows": j(frame), "sql": None, "truncated": False,
-            "answer": f"Pre-wired answer ({len(frame)} row{'s' if len(frame) != 1 else ''}) - "
-                      "the table below is the same query the dashboard runs."}
+            "answer": f"Here {'is' if n == 1 else 'are'} the {n} "
+                      f"{'result' if n == 1 else 'results'}, on the same figures as the dashboard."}
 
 
 @app.post("/api/ask")

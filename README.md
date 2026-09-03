@@ -54,9 +54,15 @@ Nothing here mutates the ops database — it is opened read-only everywhere.
 
 `/ask` is a full-page chat. Each question becomes one SQL query against the
 cleaned layer; the query runs; the answer is written from the rows that came
-back. Every answer shows **what was measured** (one plain-English line), the
-rows, and the SQL - and the model declines questions the tables cannot answer
-(forecasts, NPS, weather) instead of guessing. Put `ANTHROPIC_API_KEY=sk-ant-...`
+back. Every answer shows **what was counted** (one plain-English line) and the
+rows behind it - and the model declines questions the tables cannot answer
+(forecasts, NPS, weather) instead of guessing.
+
+The generated SQL is deliberately **not** shown in the UI: Divya asked for "an
+answer with the numbers behind it", and the query is engineering exhaust on an
+operator's screen. It is still returned by `POST /api/ask` and asserted against
+`metrics.py` by `eval_chat.py`, so the audit path is intact - `GET /api/findings`
+and `GET /api/health-data` likewise serve the full evidence to whoever wants it. Put `ANTHROPIC_API_KEY=sk-ant-...`
 in `control_tower/.env` (gitignored; plain KEY=VALUE lines) or export it, then
 restart the server. Without a key the page still works through pre-wired
 questions; nothing else in the app needs the network.
@@ -80,8 +86,8 @@ python eval_chat.py   # regression-tests the chat: 16 questions - the brief's ei
 | `build.py` | Raw SQLite → cleaned semantic layer (`analytics.sqlite`), rebuilt from scratch each run |
 | `metrics.py` | **Every KPI defined exactly once.** Dashboard, smoke test and chat all read from here |
 | `server.py` | FastAPI backend: JSON endpoints over metrics.py + the ask endpoint; serves `/` and `/ask` |
-| `web/index.html` | The dashboard - plain-English tiles with targets, worst performers first, six tabs |
-| `web/ask.html` | The Ask AI page - chat UI with "measured as", data and SQL under every answer |
+| `web/index.html` | The dashboard - plain-English tiles with targets, worst performers first, five tabs for the brief's five asks |
+| `web/ask.html` | The Ask AI page - chat UI stating what was counted, with the numbers under every answer |
 | `web/app.css`, `web/common.js` | Shared styles and helpers (tables, SVG charts, formatting); zero frontend dependencies |
 | `asksql.py` | NL → SQL over the semantic layer; the dashboard's definitions are in the prompt as reference queries; SELECT-only, read-only connection |
 | `eval_chat.py` | Chat regression eval: generated SQL checked against metrics.py at run time |

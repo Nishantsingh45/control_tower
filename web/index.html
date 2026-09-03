@@ -11,7 +11,6 @@
   <a class="brand" href="/"><span class="logo">K</span>
     <div><h1>Kestrel Control Tower</h1><div class="sub">One screen, one set of numbers</div></div></a>
   <div class="spacer"></div>
-  <a class="link" href="#" data-goto="health">Data health</a>
   <a class="btn" href="/ask">✦ Ask AI</a>
 </header>
 
@@ -31,14 +30,13 @@
   <button data-p="cold">Cold chain</button>
   <button data-p="money">Money</button>
   <button data-p="price">Prices vs competitors</button>
-  <button data-p="health">Data health</button>
 </nav>
 
 <main>
   <!-- ================= OVERVIEW ================= -->
   <section class="panel on" id="p-overview">
     <div class="intro"><h2>Where are we losing service, and where are we losing money?</h2>
-      <p>Green / amber / red against the targets in <code>config.py</code>. Every number here is the same one the Ask AI page uses.</p></div>
+      <p>Worst performers first, measured against target. Ask AI answers from these same figures, so the two can never disagree.</p></div>
     <div class="tiles" id="tiles"></div>
     <div class="grid2">
       <div class="card"><h3>Outlets getting the worst service</h3>
@@ -103,7 +101,7 @@
         <p class="caption">Credit-note value, ₹ lakh, selected period and region.</p>
         <div id="c-retcat"></div></div>
       <div class="card"><h3>Returns by reason</h3>
-        <p class="caption">What customers send back, and why. From finance credit notes - the driver app logs returns on different orders (Data health, F20), so only the credit notes are counted.</p>
+        <p class="caption">What customers send back, and why. Counted from credit notes raised by finance - the driver app records returns against different orders, so only the credit notes are used.</p>
         <div class="scroll" id="t-retreason"></div></div>
     </div>
     <div class="card"><h3>Leakage - orders still being taken for discontinued products</h3>
@@ -134,17 +132,8 @@
       <div class="scroll" id="t-sku"></div></div>
   </section>
 
-  <!-- ================= DATA HEALTH ================= -->
-  <section class="panel" id="p-health">
-    <div class="intro"><h2>Data health</h2><p>What was cleaned, what was excluded, and what could not be matched - so nobody has to take the numbers on trust.</p></div>
-    <div class="grid2">
-      <div class="card"><h3>Outlets excluded from rankings</h3><p class="caption">They stay in historical totals.</p><div class="scroll" id="t-excl"></div></div>
-      <div class="card"><h3>Build metadata</h3><p class="caption">When the analytics layer was built, from which file.</p><div class="scroll" id="t-build"></div></div>
-    </div>
-    <div class="card"><h3>Competitor listings we could not match to a product</h3><div class="scroll" id="t-unmatched"></div></div>
-    <div class="card md" id="t-findings"><h3>Verified data findings</h3><span class="spin"></span></div>
-  </section>
 </main>
+<footer id="foot"></footer>
 <div class="tip" id="tip"></div>
 
 <script src="/common.js"></script>
@@ -179,7 +168,7 @@ async function loadKpis() {
       d: k.freight_per_delivered_case_inr ? deltaHtml(k.freight_per_delivered_case_inr, p.freight_per_delivered_case_inr, { unit: "", digits: 0, higherIsBetter: false }) : "",
       m: k.freight_billed_inr
           ? `${money(k.freight_confirmed_inr)} confirmed this period. Excludes ${money(k.freight_disputed_inr)} under dispute (${fmt(k.freight_disputed_pct, 0)}% of invoices billed) - a contested charge, not a confirmed cost. Company-wide only - invoices carry no region.`
-          : "Run etl/fetch_freight.py to load carrier invoices." },
+          : "Carrier invoices have not been loaded for this period." },
     { key: "open", l: "Open orders", v: fmt(k.open_orders, 0),
       d: deltaHtml(k.open_orders, p.open_orders, { digits: 0, higherIsBetter: false }),
       m: `${money(k.open_orders_value_inr)} booked but not yet delivered. Not counted in service figures.` },
@@ -225,13 +214,13 @@ async function loadMoney() {
     ? `${fmt(d.discontinued_lines, 0)} order lines across ${d.discontinued_skus} discontinued products, ${quarterRange(state.quarter)}. Top ten below.`
     : "No orders on discontinued products in this period.";
   table("t-disc", d.discontinued);
-  table("t-frwh", d.freight_by_warehouse, { bars: { freight_per_case_inr: Math.max(...d.freight_by_warehouse.map(r => r.freight_per_case_inr), 1) }, empty: "Run etl/fetch_freight.py to load carrier invoices." });
-  table("t-frcar", d.freight_by_carrier, { empty: "Run etl/fetch_freight.py to load carrier invoices." });
+  table("t-frwh", d.freight_by_warehouse, { bars: { freight_per_case_inr: Math.max(...d.freight_by_warehouse.map(r => r.freight_per_case_inr), 1) }, empty: "Carrier invoices have not been loaded for this period." });
+  table("t-frcar", d.freight_by_carrier, { empty: "Carrier invoices have not been loaded for this period." });
 }
 
 async function loadPrice(city) {
   const d = await api(`/api/price${city ? `?city=${encodeURIComponent(city)}` : ""}`);
-  if (!d.available) { $("t-gap").innerHTML = '<div class="empty">Run etl/scrape_bazaarpulse.py to load competitor prices.</div>'; return; }
+  if (!d.available) { $("t-gap").innerHTML = '<div class="empty">Competitor prices have not been collected yet.</div>'; return; }
   const cats = [...new Set(d.gap.map(r => r.category))].sort(), cities = d.cities;
   const lut = {}; d.gap.forEach(r => lut[r.category + "|" + r.city] = r.avg_gap_vs_mrp_pct);
   let h = "<table class='heat'><thead><tr><th>Category</th>" + cities.map(c => `<th class="num">${esc(c)}</th>`).join("") + "</tr></thead><tbody>";
@@ -245,7 +234,8 @@ async function loadPrice(city) {
     }).join("") + "</tr>";
   }
   $("t-gap").innerHTML = h + "</tbody></table>";
-  $("n-price").textContent = `${fmt(d.matched, 0)} competitor listings matched to our products (${fmt(d.fuzzy, 0)} by a fuzzy match), ${fmt(d.unmatched, 0)} unmatched - see Data health.`;
+  $("n-price").textContent = `Based on ${fmt(d.matched, 0)} competitor listings matched to our products`
+    + (d.unmatched ? `; ${fmt(d.unmatched, 0)} could not be matched and are left out.` : ".");
   const sel = $("city");
   if (!sel.options.length) cities.forEach(c => sel.add(new Option(c, c)));
   sel.value = d.city;
@@ -253,17 +243,16 @@ async function loadPrice(city) {
   table("t-sku", d.top_skus, { flag: { col: "gap_pct", test: v => v != null && v <= -15, text: "undercut 15%+", level: "critical" } });
 }
 
-async function loadHealth() {
+/* One quiet line of provenance instead of an engineering tab: how current the
+   figures are, and which outlets are held out of the rankings above. */
+async function loadFooter() {
   const d = await api("/api/health-data");
-  table("t-excl", d.exclusions);
-  if (d.build.length) {
-    const b = d.build[0];
-    $("t-build").previousElementSibling.textContent = `Built ${b.built_at} UTC from ${b.source_db}`;
-    table("t-build", d.build.map(({ table_name, rows }) => ({ table_name, rows })));
-  }
-  table("t-unmatched", d.unmatched_listings, { empty: "Every competitor listing was matched to a product." });
-  const md = await (await fetch("/api/findings")).text();
-  $("t-findings").innerHTML = "<h3>Verified data findings (FINDINGS.md)</h3>" + mdToHtml(md);
+  const by = Object.fromEntries(d.exclusions.map(r => [r.exclude_reason, r.outlets]));
+  const held = ["CLOSED", "DELETED", "TEST"].filter(k => by[k])
+    .map(k => `${by[k]} ${k.toLowerCase()}`).join(", ");
+  $("foot").innerHTML =
+    `Figures cover Jan 2025 – Jun 2026, from Kestrel's order, delivery, stock and carrier records.` +
+    (held ? ` Rankings leave out ${held} outlets; company totals still include them.` : "");
 }
 
 /* ---------- boot ---------- */
@@ -282,7 +271,6 @@ function showTab(name) {
   document.querySelectorAll("nav.tabs button").forEach(x => x.classList.toggle("on", x.dataset.p === name));
   document.querySelectorAll(".panel").forEach(p => p.classList.remove("on"));
   $("p-" + name).classList.add("on");
-  if (name === "health" && !$("t-excl").innerHTML) loadHealth();
   history.replaceState(null, "", "#" + name);            /* deep-linkable: /#money */
   window.scrollTo({ top: 0 });
 }
@@ -300,10 +288,9 @@ function showTab(name) {
     loadKpis(); loadService(); };
   $("uom-each").onclick = () => setUom("each"); $("uom-case").onclick = () => setUom("case");
   $("tabs").addEventListener("click", ev => { const b = ev.target.closest("button"); if (b) showTab(b.dataset.p); });
-  document.querySelectorAll("[data-goto]").forEach(a => a.onclick = ev => { ev.preventDefault(); showTab(a.dataset.goto); });
   $("city").onchange = e => loadPrice(e.target.value);
   if (location.hash.length > 1) showTab(location.hash.slice(1));
-  refresh();
+  refresh(); loadFooter();
 })();
 </script>
 </body>

@@ -1,8 +1,11 @@
 """Ask-anything core: natural language -> SQL over the semantic layer.
 
 Design constraints, in order of importance:
-  1. Answers carry their numbers: every reply returns the generated SQL, a
-     one-line statement of WHAT WAS MEASURED, and the rows behind it.
+  1. Answers carry their numbers: Divya asked for "an answer with the numbers
+     behind it", so every reply returns a plain-English statement of WHAT WAS
+     COUNTED plus the rows themselves. The generated SQL is returned by the API
+     and checked by eval_chat.py, but it is NOT shown in the UI - she asked for
+     numbers, not queries, and the query is engineering exhaust on her screen.
   2. The model only ever sees the CLEANED semantic layer (same tables as the
      dashboard) and is handed the dashboard's own metric definitions as
      reference queries, so chat and charts cannot disagree.
@@ -283,8 +286,12 @@ from fct_order o join dim_promotion p using(promo_code)
 group by 1,2,3,4 order by order_value_cr desc limit 10
 
 OUTPUT FORMAT (exactly this, nothing else - no prose, no code fences)
-  line 1:  -- measures: <one plain-English sentence: what is computed, the
-           definition used, and the period>
+  line 1:  -- measures: <one plain-English sentence: what is counted, the
+           definition used, and the period. This line is shown to the Head of
+           Operations, so write it for her: no table names, no column names,
+           no SQL words, no finding codes like "F21". Say "orders placed after
+           the outlet closed", never "fct_order joined to dim_outlet where
+           status='CLOSED'".>
   then:    one SQLite SELECT or WITH...SELECT statement. No trailing semicolon.
            Round percentages to 1 decimal. Limit to {MAX_ROWS} rows or fewer.
            Readable column aliases (fill_rate_pct, returns_lakh, value_cr).
@@ -311,6 +318,12 @@ Rules:
     nothing matched.
   * If the result is marked TRUNCATED, say the figures cover only the rows
     returned.
+  * You are a colleague answering a question, not a system describing itself.
+    NEVER mention SQL, queries, tables, columns, databases, row counts or how
+    the answer was produced. No "the query returned", no "based on the data
+    provided", no table or column names, no finding codes like "F20". Just
+    give her the answer and the numbers, the way an analyst would say it out
+    loud.
   * Light Markdown is rendered, so use it to help a skim-reader: **bold** the
     headline number(s), and a short bullet list when comparing three or more
     items (categories, warehouses, months). Do not use headings, and do not
