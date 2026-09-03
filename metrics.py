@@ -12,6 +12,9 @@ Conventions (defended in FINDINGS.md / DECISIONS.md):
   * OTIF: on-time = delay_minutes <= 30; in-full = order fill >= 98% (F3, F4).
   * Rankings exclude TEST/CLOSED/DELETED outlets; historical totals keep them (F12).
   * Money figures use recomputed net values, never PARTNER_API's inflated feed (F2).
+  * Freight cost uses only confirmed invoices (status PAID or PENDING); DISPUTED
+    invoices (~1 in 5, by count and value) are excluded from cost and shown
+    separately - a contested carrier charge is not a confirmed cost (F18).
 """
 import sqlite3
 
@@ -122,13 +125,21 @@ def kpi_summary(con, quarter=None, region_id=None, uom="each") -> dict:
     if has_table(con, "fct_freight"):
         w2, p2 = _filters(quarter, None)   # freight has no region grain (see DECISIONS)
         r = con.execute(f"""
-            select sum(amount_inr) as freight from fct_freight where 1=1 {w2}""", p2).fetchone()
+            select sum(case when status != 'DISPUTED' then amount_inr else 0 end) as confirmed,
+                   sum(case when status =  'DISPUTED' then amount_inr else 0 end) as disputed,
+                   sum(amount_inr) as billed
+            from fct_freight where 1=1 {w2}""", p2).fetchone()
         cases = con.execute(f"""
             select sum(delivered_case) from fct_order_line
             where service_measurable {w}""", p).fetchone()[0]
-        out["freight_inr"] = r["freight"]
+        out["freight_confirmed_inr"] = r["confirmed"]
+        out["freight_disputed_inr"] = r["disputed"]
+        out["freight_billed_inr"] = r["billed"]
+        out["freight_disputed_pct"] = (r["disputed"] * 100.0 / r["billed"]) if r["billed"] else None
+        # F18: cost per case is computed on CONFIRMED freight only - a disputed
+        # invoice is not yet a real cost.
         out["freight_per_delivered_case_inr"] = (
-            r["freight"] / cases if (r["freight"] and cases and not region_id) else None)
+            r["confirmed"] / cases if (r["confirmed"] and cases and not region_id) else None)
     return out
 
 
@@ -296,30 +307,40 @@ def discontinued_still_ordered(con, quarter=None) -> pd.DataFrame:
 
 def freight_per_case_by_warehouse(con, quarter=None) -> pd.DataFrame:
     """Freight invoices carry warehouse + service month but no delivery key, so
-    cost-per-case is honest only at warehouse x month grain (see DECISIONS)."""
+    cost-per-case is honest only at warehouse x month grain (see DECISIONS).
+    F18: cost per case is confirmed invoices only (status != DISPUTED); the
+    disputed amount is shown alongside, never netted in or silently dropped."""
     w, p = _filters(quarter, None, "f")
     return df(con, f"""
         with freight as (
-            select warehouse_code, sum(amount_inr) as freight_inr
+            select warehouse_code,
+                   sum(case when status != 'DISPUTED' then amount_inr else 0 end) as confirmed_inr,
+                   sum(case when status =  'DISPUTED' then amount_inr else 0 end) as disputed_inr
             from fct_freight f where 1=1 {w} group by 1),
         cases as (
             select wh.warehouse_code, sum(l.delivered_case) as delivered_cases
             from fct_order_line l join dim_warehouse wh using(warehouse_id)
             where l.service_measurable {w.replace('f.','l.')} group by 1)
-        select c.warehouse_code, round(f.freight_inr/1e7,2) as freight_cr,
+        select c.warehouse_code, round(f.confirmed_inr/1e7,2) as freight_confirmed_cr,
+               round(f.disputed_inr/1e7,2) as freight_disputed_cr,
                round(c.delivered_cases) as delivered_cases,
-               round(f.freight_inr / c.delivered_cases, 1) as freight_per_case_inr
+               round(f.confirmed_inr / c.delivered_cases, 1) as freight_per_case_inr
         from cases c join freight f using(warehouse_code)
         order by freight_per_case_inr desc""", p + p)
 
 
 def freight_by_carrier(con, quarter=None) -> pd.DataFrame:
+    """F18: confirmed and disputed amounts are separate columns - a disputed
+    invoice is a contested amount, not a folded-in cost or a hidden one."""
     w, p = _filters(quarter, None)
     return df(con, f"""
-        select carrier_name, round(sum(amount_inr)/1e7,2) as freight_cr,
+        select carrier_name,
+               round(sum(case when status != 'DISPUTED' then amount_inr else 0 end)/1e7,2) as freight_confirmed_cr,
+               round(sum(case when status =  'DISPUTED' then amount_inr else 0 end)/1e7,2) as freight_disputed_cr,
                count(*) as invoices,
                round(avg(amount_inr),0) as avg_invoice_inr,
-               sum(status='DISPUTED') as disputed
+               sum(status='DISPUTED') as disputed_invoices,
+               round(sum(status='DISPUTED')*100.0/count(*),1) as disputed_pct
         from fct_freight where 1=1 {w} group by 1 order by 2 desc""", p)
 
 

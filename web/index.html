@@ -113,10 +113,11 @@
       <div class="scroll" style="margin-top:10px" id="t-disc"></div></div>
     <div class="grid2">
       <div class="card"><h3>Freight cost per delivered case, by warehouse</h3>
-        <p class="caption">Carrier invoices ÷ cases delivered. Company-wide by warehouse - invoices carry no region or delivery key.</p>
-        <div class="scroll" id="t-frwh"></div></div>
+        <p class="caption">Confirmed carrier invoices (excludes disputed) ÷ cases delivered. Company-wide by warehouse - invoices carry no region or delivery key.</p>
+        <div class="scroll" id="t-frwh"></div>
+        <div class="note">About 1 in 5 invoices is under formal dispute and shown as its own column, never folded into cost or dropped silently.</div></div>
       <div class="card"><h3>Freight by carrier</h3>
-        <p class="caption">Invoiced amount, selected period.</p>
+        <p class="caption">Confirmed invoiced amount, selected period. Disputed amount and share shown alongside.</p>
         <div class="scroll" id="t-frcar"></div></div>
     </div>
   </section>
@@ -174,9 +175,11 @@ async function loadKpis() {
       d: deltaHtml(k.returns_pct_of_dispatch, p.returns_pct_of_dispatch, { unit: " pt", digits: 2, higherIsBetter: false }),
       m: `${money(k.returns_value_inr)} credited back, as a share of ${money(k.dispatch_value_inr)} dispatched.` },
     { key: "freight", l: "Freight per delivered case",
-      v: k.freight_per_delivered_case_inr ? "₹" + fmt(k.freight_per_delivered_case_inr, 0) : (k.freight_inr ? "n/a by region" : "–"),
+      v: k.freight_per_delivered_case_inr ? "₹" + fmt(k.freight_per_delivered_case_inr, 0) : (k.freight_billed_inr ? "n/a by region" : "–"),
       d: k.freight_per_delivered_case_inr ? deltaHtml(k.freight_per_delivered_case_inr, p.freight_per_delivered_case_inr, { unit: "", digits: 0, higherIsBetter: false }) : "",
-      m: k.freight_inr ? `${money(k.freight_inr)} billed by carriers this period. Company-wide only - invoices carry no region.` : "Run etl/fetch_freight.py to load carrier invoices." },
+      m: k.freight_billed_inr
+          ? `${money(k.freight_confirmed_inr)} confirmed this period. Excludes ${money(k.freight_disputed_inr)} under dispute (${fmt(k.freight_disputed_pct, 0)}% of invoices billed) - a contested charge, not a confirmed cost. Company-wide only - invoices carry no region.`
+          : "Run etl/fetch_freight.py to load carrier invoices." },
     { key: "open", l: "Open orders", v: fmt(k.open_orders, 0),
       d: deltaHtml(k.open_orders, p.open_orders, { digits: 0, higherIsBetter: false }),
       m: `${money(k.open_orders_value_inr)} booked but not yet delivered. Not counted in service figures.` },
@@ -260,11 +263,7 @@ async function loadHealth() {
   }
   table("t-unmatched", d.unmatched_listings, { empty: "Every competitor listing was matched to a product." });
   const md = await (await fetch("/api/findings")).text();
-  $("t-findings").innerHTML = "<h3>Verified data findings (FINDINGS.md)</h3>" + esc(md)
-    .replace(/^## (.*)$/gm, "<h2>$1</h2>").replace(/^# (.*)$/gm, "<h2>$1</h2>")
-    .replace(/^&gt; (.*)$/gm, "<blockquote>$1</blockquote>")
-    .replace(/\*\*(.+?)\*\*/g, "<b>$1</b>").replace(/`([^`]+)`/g, "<code>$1</code>")
-    .replace(/\n\n/g, "<br><br>");
+  $("t-findings").innerHTML = "<h3>Verified data findings (FINDINGS.md)</h3>" + mdToHtml(md);
 }
 
 /* ---------- boot ---------- */

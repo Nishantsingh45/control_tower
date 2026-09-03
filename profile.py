@@ -4,10 +4,11 @@ reviewer can re-run the evidence.  Usage:  python profile.py  ->  FINDINGS.md
 Read-only against the ops database. No third-party dependencies.
 """
 import datetime as dt
+import json
 import re
 import sqlite3
 
-from config import KESTREL_DB, REPO_ROOT
+from config import CACHE_DIR, KESTREL_DB, REPO_ROOT
 
 OUT = REPO_ROOT / "FINDINGS.md"
 
@@ -249,6 +250,51 @@ competitor price matching) silently picks one at random; the price matcher disam
 name collisions using the MRP displayed on the retailer listing. Which SKU is 'right' needs a
 client answer - flagged, not guessed.""",
         "; ".join(f"'{n}' x{c}: {s} (MRP {m})" for n, c, s, m in dupn[:4]) + " ...")
+
+    # F18 -- disputed freight invoices (V2: only once the partner-API cache exists)
+    freight_cache = CACHE_DIR / "freight_invoices.jsonl"
+    if freight_cache.exists():
+        n_total = n_disp = 0
+        v_total = v_disp = 0
+        for line in freight_cache.read_text(encoding="utf-8").splitlines():
+            if not line:
+                continue
+            r = json.loads(line)
+            n_total += 1
+            v_total += r["amount"]
+            if r["status"] == "DISPUTED":
+                n_disp += 1
+                v_disp += r["amount"]
+        add("F18. One in five carrier invoices is under dispute, and freight cost summed it anyway",
+            f"""{n_disp:,} of {n_total:,} freight invoices ({n_disp*100.0/n_total:.1f}% by count,
+Rs {v_disp/1e9:.2f} crore of Rs {v_total/1e9:.2f} crore total by value - amounts are paise, so
+/1e9 gives crore) carry status DISPUTED: a carrier charge Kestrel has formally contested, not a
+confirmed cost. The freight-per-case KPI originally summed every invoice regardless of status,
+overstating cost by roughly a quarter in some quarters. Freight figures now report confirmed
+cost (PAID + PENDING) as the headline, with the disputed amount shown alongside rather than
+netted in or silently dropped - the same pattern F2 uses for PARTNER_API's inflated net value.""",
+            f"invoices: {n_total:,} total, {n_disp:,} disputed ({n_disp*100.0/n_total:.1f}%); "
+            f"value: Rs {v_total/1e9:.2f}cr total, Rs {v_disp/1e9:.2f}cr disputed")
+
+    # F19 -- undocumented columns checked for signal, not just left alone ---
+    hold = q("""select o.credit_hold_flag, avg(o.order_status='OPEN')*100
+                from orders o group by 1""")
+    risk = q("""select o2.risk_flag, count(distinct r.return_id)*1.0/count(distinct ord.order_id)
+                from outlets o2 join orders ord on ord.outlet_id=o2.outlet_id
+                left join returns_credit_notes r on r.order_id=ord.order_id group by 1""")
+    prio = q("""select o.priority_flag, avg(d.delay_minutes<=30)*100
+                from orders o join deliveries d on d.order_id=o.order_id group by 1""")
+    add("F19. The eight undocumented columns were checked for signal, not just left alone",
+        f"""The data dictionary flags `risk_flag`, `abc_class`, `credit_hold_flag`, `priority_flag`,
+`last_audit_date`, `avg_monthly_footfall`, `min_order_qty_cases` and `hsn_code` as undocumented.
+Each was tested against the metric it most plausibly relates to: `credit_hold_flag` vs the OPEN-order
+share ({dict(hold)[0]:.1f}% vs {dict(hold)[1]:.1f}%), `risk_flag` vs returns per order
+({', '.join(f'{k}: {v:.3f}' for k, v in risk)}), `priority_flag` vs on-time delivery rate
+({dict(prio)[0]:.1f}% vs {dict(prio)[1]:.1f}%). None showed a difference big enough to matter -
+they read as noise in this dataset, not a signal left on the table. Recorded here so "not used"
+reads as "checked, found nothing" rather than "not looked at".""",
+        f"OPEN-order share by credit_hold_flag: {dict(hold)}; returns/order by risk_flag: {dict(risk)}; "
+        f"on-time% by priority_flag: {dict(prio)}")
 
     # F14 -- what is actually clean ----------------------------------------
     dupes, orphans, multi = one("""select

@@ -132,7 +132,11 @@ match the dashboard exactly)
     source system inflates it 8.5%). Express big values in crore (/1e7) or
     lakh (/1e5) and name the unit in the column alias (value_cr, returns_lakh).
   * Freight cost per case is only honest at warehouse x month grain (invoices
-    carry no delivery key). Never join fct_freight to deliveries or orders.
+    carry no delivery key). Freight cost ALWAYS excludes DISPUTED invoices
+    (WHERE status != 'DISPUTED') - about 1 in 5 invoices is under formal
+    dispute and is not a confirmed cost. Only include disputed amounts if the
+    question explicitly asks about disputes, contested charges, or risk
+    exposure - and then label them as disputed, never add them to "cost". Never join fct_freight to deliveries or orders.
   * Fiscal year runs April-March; fy_quarter looks like 'FY27 Q1' (= Apr-Jun
     2026). month_label looks like '2026-06'. Data covers 2025-01 .. 2026-06.
     "Last month" = '{LAST_MONTH}'; "last complete quarter" / "last quarter" =
@@ -190,13 +194,13 @@ join dim_warehouse w on w.warehouse_id = d.warehouse_id
 group by 1,2 having pct_late_over_2h > 10 order by pct_late_over_2h desc
 
 Q: Freight cost per delivered case, by warehouse, for the last quarter
--- measures: carrier-invoiced freight divided by cases delivered, per warehouse, FY27 Q1 (Apr-Jun 2026)
+-- measures: confirmed carrier invoices (excludes disputed) divided by cases delivered, per warehouse, FY27 Q1 (Apr-Jun 2026)
 with freight as (select warehouse_code, sum(amount_inr) as freight_inr
-                 from fct_freight where fy_quarter = '{LAST_QUARTER}' group by 1),
+                 from fct_freight where fy_quarter = '{LAST_QUARTER}' and status != 'DISPUTED' group by 1),
 cases as (select wh.warehouse_code, sum(l.delivered_case) as delivered_cases
           from fct_order_line l join dim_warehouse wh using(warehouse_id)
           where l.service_measurable = 1 and l.fy_quarter = '{LAST_QUARTER}' group by 1)
-select c.warehouse_code, round(f.freight_inr/1e7,2) as freight_cr,
+select c.warehouse_code, round(f.freight_inr/1e7,2) as freight_confirmed_cr,
        round(c.delivered_cases) as delivered_cases,
        round(f.freight_inr/c.delivered_cases,1) as freight_per_case_inr
 from cases c join freight f using(warehouse_code) order by 4 desc
@@ -266,6 +270,10 @@ Rules:
     nothing matched.
   * If the result is marked TRUNCATED, say the figures cover only the rows
     returned.
+  * Light Markdown is rendered, so use it to help a skim-reader: **bold** the
+    headline number(s), and a short bullet list when comparing three or more
+    items (categories, warehouses, months). Do not use headings, and do not
+    bullet a two- or three-sentence answer that reads fine as prose.
 """
 
 # Pre-wired questions (no API key needed). Each entry: (measures, function).

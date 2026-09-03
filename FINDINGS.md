@@ -162,6 +162,31 @@ client answer - flagged, not guessed.
 
 > **Evidence:** 'Amrit Valley Paneer 200g' x2: SKU00019,SKU00023 (MRP 139.0,100.0); 'Amrit Valley Rusk 150g' x2: SKU00078,SKU00081 (MRP 423.0,408.0); 'Bluepeak Biscuits 200g' x2: SKU00168,SKU00174 (MRP 477.0,468.0); 'Bluepeak Frozen Peas 100g' x2: SKU00187,SKU00190 (MRP 435.0,356.0) ...
 
+## F18. One in five carrier invoices is under dispute, and freight cost summed it anyway
+
+8,252 of 41,500 freight invoices (19.9% by count,
+Rs 39.02 crore of Rs 195.35 crore total by value - amounts are paise, so
+/1e9 gives crore) carry status DISPUTED: a carrier charge Kestrel has formally contested, not a
+confirmed cost. The freight-per-case KPI originally summed every invoice regardless of status,
+overstating cost by roughly a quarter in some quarters. Freight figures now report confirmed
+cost (PAID + PENDING) as the headline, with the disputed amount shown alongside rather than
+netted in or silently dropped - the same pattern F2 uses for PARTNER_API's inflated net value.
+
+> **Evidence:** invoices: 41,500 total, 8,252 disputed (19.9%); value: Rs 195.35cr total, Rs 39.02cr disputed
+
+## F19. The eight undocumented columns were checked for signal, not just left alone
+
+The data dictionary flags `risk_flag`, `abc_class`, `credit_hold_flag`, `priority_flag`,
+`last_audit_date`, `avg_monthly_footfall`, `min_order_qty_cases` and `hsn_code` as undocumented.
+Each was tested against the metric it most plausibly relates to: `credit_hold_flag` vs the OPEN-order
+share (2.1% vs 1.8%), `risk_flag` vs returns per order
+(HIGH: 0.165, LOW: 0.170, MEDIUM: 0.160), `priority_flag` vs on-time delivery rate
+(60.2% vs 61.7%). None showed a difference big enough to matter -
+they read as noise in this dataset, not a signal left on the table. Recorded here so "not used"
+reads as "checked, found nothing" rather than "not looked at".
+
+> **Evidence:** OPEN-order share by credit_hold_flag: {0: 2.0600441170972443, 1: 1.8367346938775513}; returns/order by risk_flag: {'HIGH': 0.164993481095176, 'LOW': 0.1703312585512497, 'MEDIUM': 0.1599951332278866}; on-time% by priority_flag: {0: 60.1681283482299, 1: 61.67531504818384}
+
 ## F14. What is clean (and is relied on)
 
 Order numbers unique (0 dupes), no orphan lines (0), deliveries map

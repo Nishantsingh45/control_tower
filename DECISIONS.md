@@ -32,35 +32,37 @@ service metrics — they carry delivered quantities with no delivery notes (F9);
 freight per case is computed at warehouse × month because invoices carry no
 delivery key, and anything finer would be invented precision.
 
-**What I deliberately did not build.** Auth/RBAC (the region filter serves the
-regional-manager need for a demo); real-time or scheduled refresh (the data is
-a static extract); weather/holiday enrichment (a hypothesis worth testing —
-Open-Meteo max-temp vs excursion rate — but not on this budget, and "it was
-available" is not a reason); shipment-event ingestion (41,500 extra flaky calls
-for event trails that join to nothing); fuzzy outlet dedup; forecasting. The
-scraper also never touches `/internal/` — robots.txt disallows it, and I treat
-that as binding even on a local copy.
+**Deliberately not built.** Auth/RBAC (region filter covers the regional-manager
+need for a demo); scheduled refresh (static extract); weather/holiday
+enrichment (worth testing, not on this budget — "it was available" isn't a
+reason); shipment-event ingestion (41,500 flaky calls for event trails that
+join to nothing); fuzzy outlet dedup; forecasting. The scraper never touches
+`/internal/` — robots.txt disallows it, treated as binding on a local copy too.
 
-**With two more weeks.** Incremental builds instead of full rebuilds; a proper
-warehouse (DuckDB/Postgres) with dbt-style tested models; the price matcher
-extended with embedding similarity plus human review of the unmatched bucket;
-alerting (worst-performer deltas pushed, not pulled); eval harness for the chat
-(the brief's questions as regression tests); weather join to separate reefer
-failures from heat waves; per-user views and saved questions.
+**With two more weeks.** Incremental builds, not full rebuilds; a real warehouse
+(DuckDB/Postgres, dbt-tested models); embedding-based price matching plus human
+review of the unmatched bucket; the chat eval in CI; alerting on
+worst-performer deltas; weather join to separate reefer failures from heat
+waves; per-user saved questions.
 
 **What breaks first in production.** The full rebuild — O(all history) in
 in-process SQLite — is fine at 820K rows and wrong at 100×; it needs
 incremental loads keyed on order/delivery IDs and a real warehouse. Second:
-the title-based SKU matcher (100% here, but only after building a rewrite
-table for retailer abbreviations like "Inst."/"Frzn" — real listings will not
-match this cleanly) degrades as competitors reword titles; production needs a
-curated mapping table with confidence decay and review of the unmatched bucket.
-Third: the chat. Grounding answers in SQL that really runs stops invented
-numbers, but not a plausible query for the wrong question — the first version
-priced "orders on discontinued SKUs" at the lifetime value of every SKU that is
-discontinued today (real rows, 8× too big). The fix is structural, not a
-prompt tweak: the dashboard's own metric definitions are in the prompt as
-reference queries, every answer states what it measured, the model may decline
-unanswerable questions, and `eval_chat.py` re-checks twelve questions against
-`metrics.py`. It still depends on an external API and degrades to pre-wired
-questions without one; production needs the eval in CI and a query allowlist.
+the title-based SKU matcher (100% here, but only after a rewrite table for
+retailer abbreviations like "Inst."/"Frzn") degrades as competitors reword
+titles; needs a curated mapping table with confidence decay. Third, and
+recurring: an unverified status field going straight into a sum. The chat's
+first version priced "orders on discontinued SKUs" at the lifetime value of
+every SKU discontinued *today* (real rows, 8× too big) — fixed structurally,
+not with a prompt tweak: the dashboard's own reference queries and house rules
+are in the prompt, every answer states what it measured, the model may
+decline, and `eval_chat.py` checks twelve questions against `metrics.py`. The
+same pattern turned up a second time in the canonical layer itself: freight
+cost summed every invoice regardless of status, including the ~1-in-5 marked
+DISPUTED, overstating the headline freight-per-case KPI by up to 25% (F18) —
+fixed the way F2 handles PARTNER_API's inflated net (a confirmed figure by
+default, the excluded amount always shown, never dropped). The undocumented
+columns the dictionary flags were also checked, not skipped (F19); they carry
+no signal. Next to audit: every status/validity field on an external feed
+needs an explicit include/exclude call before a sum, and the chat needs the
+eval in CI plus a query allowlist.

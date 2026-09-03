@@ -71,7 +71,7 @@ function card(res) {
   const n = res.rows ? res.rows.length : 0;
   const isCannot = res.status === "cannot", isErr = res.status === "error";
   let h = `<div class="msg bot${isErr ? " error" : ""}"><div class="who">Kestrel · Ask AI${res.sql === null ? " · pre-wired" : ""}</div>
-    <div class="answer">${esc(res.answer || "").replace(/\n/g, "<br>")}</div>`;
+    <div class="answer">${mdToHtml(res.answer || "")}</div>`;
   if (res.measures) h += `<div class="measures"><b>Measured as:</b> ${esc(res.measures)}</div>`;
   if (!isCannot && (n || res.sql)) {
     h += `<div class="actions">` +

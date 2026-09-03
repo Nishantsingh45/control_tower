@@ -39,6 +39,10 @@ python etl/scrape_bazaarpulse.py  # scrapes the bundled competitor site.
                                   # 1s crawl-delay and we honour it across
                                   # ~1,200 pages. Cached + resumable after.
                                   # Serves the site itself if :8080 is quiet.
+
+python profile.py                 # re-run once fetch_freight.py has cached data,
+                                  # to pick up F18 (disputed-invoice finding) -
+                                  # profile.py only sees what's in cache/ so far.
 ```
 
 Both are resumable and cache to `cache/`; re-running `build.py` re-materialises
@@ -98,5 +102,7 @@ python eval_chat.py   # regression-tests the chat: 12 questions (the brief's eig
 * **Money** — net values recomputed from components (one source system inflates
   its reported net by exactly 8.5%, F2). Freight uses carrier invoices only,
   never the driver-entered fuel column; cost per case is computed at
-  warehouse × month grain because invoices carry no delivery key.
+  warehouse × month grain because invoices carry no delivery key, and only from
+  **confirmed** invoices (PAID/PENDING) — 1 in 5 invoices is DISPUTED and is
+  shown as its own figure, never folded into cost (F18).
 * Rankings exclude test/closed/deleted outlets; historical totals keep them (F12).

@@ -50,7 +50,8 @@ const LABELS = {
   listing_id: "Listing", retailer: "Retailer", listing_title: "Listing title", pack: "Pack",
   category_site: "Site category", price_inr: "Price (₹)",
   built_at: "Built at", source_db: "Source DB", table_name: "Table", rows: "Rows",
-  freight_cr: "Freight (₹ cr)",
+  freight_confirmed_cr: "Confirmed (₹ cr)", freight_disputed_cr: "Disputed (₹ cr)",
+  disputed_invoices: "Disputed invoices", disputed_pct: "Disputed",
 };
 const label = c => LABELS[c] || c.replace(/_/g, " ").replace(/\bpct\b/, "%");
 
@@ -189,3 +190,22 @@ function deltaHtml(cur, prev, { unit = "", digits = 1, higherIsBetter = true, la
 
 /* ---------- rows -> HTML table string (for chat cards) ---------- */
 function rowsToTable(rows, opts) { const d = document.createElement("div"); table(d, rows, opts); return d.innerHTML; }
+
+/* ---------- small, safe Markdown -> HTML (headings, bold, code, lists,
+   blockquotes, paragraphs). Escapes first, then builds real tags around the
+   escaped text, so nothing in the source can inject markup. ---------- */
+function mdToHtml(md) {
+  let s = esc(md ?? "");
+  s = s.replace(/`([^`]+)`/g, "<code>$1</code>");
+  s = s.replace(/\*\*(.+?)\*\*/g, "<b>$1</b>");
+  s = s.replace(/^### (.*)$/gm, "<h3>$1</h3>").replace(/^## (.*)$/gm, "<h2>$1</h2>").replace(/^# (.*)$/gm, "<h2>$1</h2>");
+  s = s.replace(/^&gt; (.*)$/gm, "<blockquote>$1</blockquote>");
+  const listBlock = (re, tag) => { s = s.replace(re, (m, pre, block) => {
+    const items = block.trim().split("\n").map(l => `<li>${l.replace(/^\s*(?:[-*]|\d+\.)\s+/, "")}</li>`).join("");
+    return `${pre}<${tag}>${items}</${tag}>`; }); };
+  listBlock(/(^|\n)((?:[ \t]*[-*] .*(?:\n|$))+)/g, "ul");
+  listBlock(/(^|\n)((?:[ \t]*\d+\. .*(?:\n|$))+)/g, "ol");
+  return s.split(/\n{2,}/).map(p => p.trim()).filter(Boolean)
+    .map(p => /^<(h\d|ul|ol|blockquote)/.test(p) ? p : `<p>${p.replace(/\n/g, "<br>")}</p>`)
+    .join("");
+}
