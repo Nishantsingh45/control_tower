@@ -43,7 +43,7 @@
         <p class="caption">Lowest fill rate this quarter. Test, closed and deleted outlets are excluded; so are outlets below 500 units ordered.</p>
         <div class="scroll" id="t-outlets"></div></div>
       <div class="card"><h3>Routes delivering latest</h3>
-        <p class="caption">Lowest OTIF this quarter - deliveries both on time (within 30 min) and at least 90% complete.</p>
+        <p class="caption">Lowest OTIF this quarter - deliveries both on time (within 30 min) and at least 90% complete. Routes with fewer than 10 deliveries are excluded.</p>
         <div class="scroll" id="t-routes"></div></div>
     </div>
     <div class="card"><h3>Fill rate and OTIF over the last 18 months</h3>
@@ -157,8 +157,10 @@ async function loadKpis() {
     { key: "otif_pct", l: "On time, in full (OTIF)", v: pct(k.otif_pct),
       d: deltaHtml(k.otif_pct, p.otif_pct, { unit: " pt" }),
       m: `Deliveries within ${state.meta.on_time_grace_min} min of plan AND at least ${Math.round(state.meta.in_full_threshold * 100)}% complete. On time alone: ${pct(k.on_time_pct, 0)}; in full alone: ${pct(k.in_full_pct, 0)}.` },
-    { key: "excursions_per_100_chilled", l: "Temperature breaches", v: fmt(k.excursions_per_100_chilled, 1),
-      d: deltaHtml(k.excursions_per_100_chilled, p.excursions_per_100_chilled, { higherIsBetter: false }),
+    // a rate, not a count - 2 decimals so "2.96 per 100" cannot be misread as
+    // "3 breaches", and so the delta reconciles with the value
+    { key: "excursions_per_100_chilled", l: "Temperature breaches", v: fmt(k.excursions_per_100_chilled, 2),
+      d: deltaHtml(k.excursions_per_100_chilled, p.excursions_per_100_chilled, { digits: 2, higherIsBetter: false }),
       m: "Per 100 deliveries carrying chilled product." },
     { key: "returns_pct_of_dispatch", l: "Returns and credit notes", v: pct(k.returns_pct_of_dispatch, 2),
       d: deltaHtml(k.returns_pct_of_dispatch, p.returns_pct_of_dispatch, { unit: " pt", digits: 2, higherIsBetter: false }),
@@ -167,7 +169,7 @@ async function loadKpis() {
       v: k.freight_per_delivered_case_inr ? "₹" + fmt(k.freight_per_delivered_case_inr, 0) : (k.freight_billed_inr ? "n/a by region" : "–"),
       d: k.freight_per_delivered_case_inr ? deltaHtml(k.freight_per_delivered_case_inr, p.freight_per_delivered_case_inr, { unit: "", digits: 0, higherIsBetter: false }) : "",
       m: k.freight_billed_inr
-          ? `${money(k.freight_confirmed_inr)} confirmed this period. Excludes ${money(k.freight_disputed_inr)} under dispute (${fmt(k.freight_disputed_pct, 0)}% of invoices billed) - a contested charge, not a confirmed cost. Company-wide only - invoices carry no region.`
+          ? `${money(k.freight_confirmed_inr)} confirmed. Excludes ${money(k.freight_disputed_inr)} still disputed (${fmt(k.freight_disputed_pct, 0)}% of invoices). Company-wide only.`
           : "Carrier invoices have not been loaded for this period." },
     { key: "open", l: "Open orders", v: fmt(k.open_orders, 0),
       d: deltaHtml(k.open_orders, p.open_orders, { digits: 0, higherIsBetter: false }),
